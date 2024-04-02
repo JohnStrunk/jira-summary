@@ -1,0 +1,47 @@
+---
+name: "Pre-commit"
+
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - main
+    tags: ["*"]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        # https://github.com/actions/checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Python
+        id: setup-py
+        # https://github.com/actions/setup-python
+        # yamllint disable-line rule:line-length
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Enable cache for pre-commit hooks
+        # https://github.com/actions/cache
+        uses: actions/cache@ab5e6d0c87105b4c9c2047343972218f562e4319 # v4.0.1
+        with:
+          path: ~/.cache/pre-commit
+          # yamllint disable-line rule:line-length
+          key: pre-commit|${{ steps.setup-py.outputs.python-version}}|${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit|${{ steps.setup-py.outputs.python-version}}|
+            pre-commit|
+
+      - name: Run pre-commit checks
+        run: pipx run pre-commit run -a
+
+      - name: Run pre-commit gc
+        run: pipx run pre-commit gc

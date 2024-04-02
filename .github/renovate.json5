@@ -1,0 +1,69 @@
+{
+  // JSON5 spec: https://json5.org/
+  // Renovate docs: https://docs.renovatebot.com/configuration-options/
+
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",             // Use recommended settings
+    "helpers:pinGitHubActionDigests", // Pin GitHub action digests
+    ":enablePreCommit",               // Enable updates to pre-commit repos
+    ":gitSignOff"                     // Add Signed-off-by line to commit messages
+  ],
+  // Files to ignore
+  // "ignorePaths": [
+  //   "docs/requirements.txt"
+  // ],
+  "labels": [
+    "dependencies"
+  ],
+  "lockFileMaintenance": {"enabled": true},
+  "packageRules": [
+    {
+      "description": "Update golang tag in dockerfile & golang version in workflows in a single PR",
+      "groupName": "golang version",
+      "matchDepNames": [
+        "^golang$"
+      ]
+    },
+    {
+      "description": "Update devcontainer images in a single PR",
+      "groupName": "devcontainer",
+      "matchFileNames": [".devcontainer/devcontainer.json"]
+    },
+    {
+      "description": "Update renovatebot/pre-commit-hooks weekly to decrease noise",
+      "matchPackageNames": ["renovatebot/pre-commit-hooks"],
+      "schedule": ["before 9am on monday"]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "devcontainer base image",
+      "fileMatch": [
+        "^.devcontainer/devcontainer.json$"
+      ],
+      "matchStrings": [
+        "\"image\"\\s*:\\s*\"(?<depName>.*?):(?<currentValue>.*?)(@(?<currentDigest>sha256:[a-f0-9]+))?\""
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "devcontainer feature images",
+      "fileMatch": [
+        "^.devcontainer/devcontainer.json$"
+      ],
+      "matchStrings": [
+        // devcontainer features don't support sha256 digests
+        "\"(?<depName>.*?):(?<currentValue>.*?)\"\\s*:\\s*"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  // "schedule": [
+  //   "before 7am on Tuesday"  // Update weekly
+  // ],
+  "semanticCommits": "disabled",
+  "timezone": "America/New_York"
+}

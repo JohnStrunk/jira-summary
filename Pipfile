@@ -1,0 +1,23 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+atlassian-python-api = "*"
+langchain = "*"
+
+[dev-packages]
+ipykernel = "*"
+mypy = "*"
+pylint = "*"
+pytest = "*"
+pytest-pylint = "*"
+pytest-mypy = "*"
+
+[requires]
+python_version = "3.12"
+
+[scripts]
+# pipenv run tests
+tests = "pytest -v"

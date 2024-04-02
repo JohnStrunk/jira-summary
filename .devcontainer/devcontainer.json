@@ -1,0 +1,34 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/debian
+{
+	"name": "Python",
+	"image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2.10.2": {},
+		"ghcr.io/devcontainers/features/github-cli:1.0.11": {},
+		"ghcr.io/devcontainers/features/node:1.4.1": {},
+		"ghcr.io/devcontainers-contrib/features/act:1.0.14": {},
+		"ghcr.io/devcontainers-contrib/features/pipenv:2.0.17": {},
+		"ghcr.io/devcontainers-contrib/features/pre-commit:2.0.17": {}
+	},
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-toolsai.jupyter"
+			]
+		}
+	},
+
+	"containerEnv": {
+		"PIPENV_SITE_PACKAGES": "false",
+		"PIPENV_VENV_IN_PROJECT": "true"
+	},
+
+	"postCreateCommand": {
+		"Initialize pre-commit environment": "nohup sh -c 'pre-commit install -f --install-hooks &' < /dev/null > /dev/null 2>&1",
+		"Install python dependencies": "rm -rf .venv && pipenv sync --dev -v"
+	}
+}
