@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 atlassian-python-api = "*"
 langchain = "*"
+langchain-together = "*"
 
 [dev-packages]
 ipykernel = "*"

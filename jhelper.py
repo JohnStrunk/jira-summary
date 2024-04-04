@@ -31,6 +31,45 @@ def _check(response: Any) -> dict:
     raise ValueError(f"Unexpected response: {response}")
 
 
+def changelog(jira: Jira, key: str) -> list[dict]:
+    """
+    Given an issue key, return the changelog for the issue.
+
+    Parameters:
+        jira: The Jira object to use for querying the API.
+        key: The issue key to get the changelog for.
+
+    Returns:
+        A list of dicts with the changelog. Each entry has the following fields:
+        - who: The name of the person who made the change.
+        - when: The timestamp of the change.
+        - what: A list of dicts with the changes. Each change has the following fields:
+            - field: The name of the field that was changed.
+            - from: The old value of the field. (may be empty)
+            - to: The new value of the field. (may be empty)
+    """
+    log = jira.get_issue_changelog(key, start=0, limit=100)
+    items = []
+    for entry in log["histories"]:
+        changes = []
+        for change in entry["items"]:
+            changes.append(
+                {
+                    "field": change["field"],
+                    "from": change["fromString"],
+                    "to": change["toString"],
+                }
+            )
+        items.append(
+            {
+                "who": entry["author"]["displayName"],
+                "when": entry["created"],
+                "what": changes,
+            }
+        )
+    return items
+
+
 def get_issue(jira: Jira, key: str) -> dict:
     """
     Given an issue key, return the issue.
@@ -128,3 +167,30 @@ def issue_one_liner(issue: dict) -> str:
         else "Unresolved"
     )
     return f"{key}: {summary} ({status}/{resolution})"
+
+
+def comments(jira: Jira, key: str) -> list[dict]:
+    """
+    Given an issue key, return the comments for the issue.
+
+    Parameters:
+        jira: The Jira object to use for querying the API.
+        key: The issue key to get the comments for.
+
+    Returns:
+        A list of dicts with the comments. Each comment has the following fields:
+        - who: The name of the person who made the comment.
+        - when: The timestamp of the comment.
+        - what: The content of the comment.
+    """
+    comments = get_issue(jira, key)["fields"]["comment"]["comments"]
+    items = []
+    for comment in comments:
+        items.append(
+            {
+                "who": comment["author"]["displayName"],
+                "when": comment["created"],
+                "what": comment["body"],
+            }
+        )
+    return items
