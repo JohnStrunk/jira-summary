@@ -1,12 +1,19 @@
+"""Streaming support for Together.ai"""
+
 from typing import Any, Iterator, List
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.outputs import GenerationChunk
 from langchain_together import Together
-from together import Complete
+from together import Complete  # type: ignore
 
 
 class StreamingTogether(Together):
+    """
+    This is a small wrapper around the `Together` class that adds support for
+    streaming via the BaseLLM.stream() interface.
+    """
+
     def _stream(
         self,
         prompt: str,

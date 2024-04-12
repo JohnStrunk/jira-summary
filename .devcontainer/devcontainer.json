@@ -24,7 +24,8 @@
 
 	"containerEnv": {
 		"PIPENV_SITE_PACKAGES": "false",
-		"PIPENV_VENV_IN_PROJECT": "true"
+		"PIPENV_VENV_IN_PROJECT": "true",
+		"PIPENV_VERBOSITY": "-1"
 	},
 
 	"postCreateCommand": {

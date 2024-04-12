@@ -7,6 +7,7 @@ name = "pypi"
 atlassian-python-api = "*"
 langchain = "*"
 langchain-together = "*"
+ibm-generative-ai = "*"
 
 [dev-packages]
 ipykernel = "*"
