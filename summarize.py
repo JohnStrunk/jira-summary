@@ -12,12 +12,10 @@ Required environment variables:
 
 import io
 import os
-import re
 import sys
 import textwrap
 from typing import Iterator, List, Tuple
 
-import requests
 from atlassian import Jira  # type: ignore
 from genai import Client, Credentials
 
@@ -70,6 +68,24 @@ def chat_model() -> LLM:
     )
 
 
+SUMMARY_START = "=== AI SUMMARY START ==="
+SUMMARY_END = "=== AI SUMMARY END ==="
+
+
+def wrap_aisummary(text: str) -> str:
+    """Wrap the AI summary in markers so it can be stripped later"""
+    return f"{SUMMARY_START}\n{textwrap.fill(text, width=72)}\n{SUMMARY_END}"
+
+
+def strip_aisummary(text: str) -> str:
+    """Remove the AI summary from a block of text"""
+    start = text.find(SUMMARY_START)
+    end = text.find(SUMMARY_END)
+    if start == -1 or end == -1:
+        return text
+    return text[:start] + text[end + len(SUMMARY_END) :]
+
+
 def related_issue_summary(jira_client: Jira, related: RelatedIssue) -> str:
     """
     Summarize a related issue.
@@ -103,20 +119,20 @@ def build_query(jira_client: Jira, issue: Issue) -> str:
 
     # Start w/ the issue key, summary, and description
     buffer.write(f"{issue.key}: {issue.summary}\n")
-    buffer.write(f"{issue.description} \n")
-
     # Add the issue status and resolution
-    buffer.write(f"Issue status: {issue.status}/{issue.resolution}\n")
+    buffer.write(f"\nStatus/Resolution: {issue.status}/{issue.resolution}\n")
+    buffer.write("\nDescription:\n")
+    buffer.write(f"{strip_aisummary(issue.description)}\n")
 
     # Add the log of comments
-    buffer.write("Comments:\n")
+    buffer.write("\nComments:\n")
     for comment in issue.comments:
         buffer.write(f"On {comment.created}, {comment.author} said:\n")
         for line in textwrap.wrap(comment.body, width=72):
             buffer.write(f"  {line}\n")
 
     # List the related issues
-    buffer.write("Related issues:\n")
+    buffer.write("\nRelated issues:\n")
     for related in issue.related:
         ri = Issue(jira_client, related.key)
         buffer.write(f"  {related.how} -- {ri}\n")
@@ -194,6 +210,46 @@ def wrap_stream(stream: Iterator[str], width: int = 72) -> Iterator[str]:
         col += len(chunk)
 
 
+def ok_to_post_summary(issue: Issue) -> bool:
+    """
+    Determine if it's ok for us to add a summary to the Jira issue.
+
+    We want to avoid re-summarizing the issue if nothing has changed since we
+    last posted the summary. Since our summary is added to the description, we
+    are using the following to tell whether we can/should summarize:
+
+    Criteria:
+        - Either:
+            - The last change was NOT made by me
+            - The last change did not include an update to the description
+        - AND
+            - The issue has the "AISummary" label
+
+    Parameters:
+        - issue: The issue to check
+
+    Returns:
+        True if it's ok to summarize, False otherwise
+    """
+    return (
+        not issue.is_last_change_mine
+        or "description" not in [chg.field for chg in issue.last_change.changes]
+    ) and "AISummary" in issue.labels
+
+
+def update_description(client: Jira, issue_key: str, new_description: str) -> None:
+    """
+    Update the description of a Jira issue.
+
+    Parameters:
+        - client: The Jira client to use.
+        - issue_key: The key of the issue to update.
+        - new_description: The new description to set.
+    """
+    fields = {"description": new_description}
+    client.update_issue_field(issue_key, fields)  # type: ignore
+
+
 def main():
     """Summarize a Jira issue."""
     if len(sys.argv) != 2:
@@ -204,6 +260,7 @@ def main():
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
     issue = Issue(jira, jira_issue_key)
+    issue.description = strip_aisummary(issue.description)
     print(f"Querying Jira -- {issue}")
 
     raw_data = build_query(jira, issue)
@@ -229,15 +286,23 @@ def main():
 
     # Send the prompt to the chat model and stream the response
     chat = chat_model()
-    # for chunk in chat.stream(prompt, max_tokens=4000):
-    #     print(chunk, end="", flush=True)
-    # wrap_stream(chat.stream(prompt, max_tokens=4000))
-    for chunk in wrap_stream(chat.stream(prompt)):
-        print(chunk, end="", flush=True)
-    print("\n")
-
     # print(f"{prompt}\n\n")
-    print(f"Prompt characters: {len(prompt)}")
+
+    # for chunk in wrap_stream(chat.stream(prompt)):
+    #     print(chunk, end="", flush=True)
+
+    summary = chat.invoke(prompt)
+    wrapped_summary = wrap_aisummary(summary)
+    print(wrapped_summary)
+    new_description = issue.description + "\n\n" + wrapped_summary
+    # print(new_description)
+
+    print(f"\n\nPrompt characters: {len(prompt)}")
+
+    print(f"Ok to post summary: {ok_to_post_summary(issue)}")
+    if ok_to_post_summary(issue):
+        print("Updating Jira...")
+        update_description(jira, issue.key, new_description)
 
 
 if __name__ == "__main__":

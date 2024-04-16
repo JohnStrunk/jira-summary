@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from re import L
 from typing import Any, List, Optional
 
 from atlassian import Jira  # type: ignore
@@ -75,10 +76,12 @@ class Issue:  # pylint: disable=too-many-instance-attributes
     """The description of the issue."""
     issue_type: str
     """The type of the issue."""
-    status: str
-    """The status of the issue."""
+    labels: List[str]
+    """The labels on the issue."""
     resolution: str
     """The resolution of the issue."""
+    status: str
+    """The status of the issue."""
     _changelog: Optional[List[ChangelogEntry]]
     _comments: Optional[List[Comment]]
     _related: Optional[List[RelatedIssue]]
@@ -92,6 +95,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             "summary",
             "description",
             "status",
+            "labels",
             "resolution",
             "issuetype",
         ]
@@ -102,6 +106,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         self.description = data["fields"]["description"]
         self.issue_type = data["fields"]["issuetype"]["name"]
         self.status = data["fields"]["status"]["name"]
+        self.labels = data["fields"]["labels"]
         self.resolution = (
             data["fields"]["resolution"]["name"]
             if data["fields"]["resolution"]
@@ -116,7 +121,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
 
     def _fetch_changelog(self) -> List[ChangelogEntry]:
         """Fetch the changelog from the API."""
-        log = _check(self._client.get_issue_changelog(self.key, start=0, limit=100))
+        log = _check(self._client.get_issue_changelog(self.key, start=0, limit=1000))
         items: List[ChangelogEntry] = []
         for entry in log["histories"]:
             changes: List[Change] = []
@@ -237,6 +242,17 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         if not self._related:
             self._related = self._fetch_related()
         return self._related
+
+    @property
+    def last_change(self) -> ChangelogEntry:
+        """Get the last change in the changelog."""
+        return self.changelog[len(self.changelog) - 1]
+
+    @property
+    def is_last_change_mine(self) -> bool:
+        """Check if the last change in the changelog was made by me."""
+        me = _check(self._client.myself())
+        return self.last_change.author == me["displayName"]
 
 
 def _check(response: Any) -> dict:
