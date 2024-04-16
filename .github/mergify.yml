@@ -18,6 +18,7 @@ pull_request_rules:
     conditions:
       - base=main
       - or:
+          - author=JohnStrunk
           - author=renovate-bot  # Renovate bot - dependency updates
       - "#changes-requested-reviews-by=0"
       - label!=do-not-merge
