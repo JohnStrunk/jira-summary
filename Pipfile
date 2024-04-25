@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 atlassian-python-api = "*"
 langchain = "*"
-langchain-together = "*"
 ibm-generative-ai = "*"
 
 [dev-packages]
