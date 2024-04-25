@@ -63,7 +63,7 @@ repos:
     rev: v2.12.0
     hooks:
       # Lint Dockerfiles
-      - id: hadolint
+      - id: hadolint-docker
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: "v0.39.0"
