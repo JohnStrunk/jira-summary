@@ -4,6 +4,7 @@ import io
 import logging
 import os
 import textwrap
+from datetime import datetime
 from typing import List, Tuple
 
 from atlassian import Jira
@@ -287,7 +288,9 @@ def _chat_model(model_name: str = _MODEL_ID) -> LLM:
     )
 
 
-def get_issues_to_summarize(client: Jira) -> List[str]:
+def get_issues_to_summarize(
+    client: Jira, since: datetime = datetime.fromisoformat("2020-01-01")
+) -> List[str]:
     """
     Get a list of issues to summarize.
 
@@ -296,14 +299,18 @@ def get_issues_to_summarize(client: Jira) -> List[str]:
 
     Parameters:
         - client: The Jira client to use
+        - since: Only return issues updated after this time
 
     Returns:
         A list of issue keys
     """
+    since_string = since.strftime("%Y-%m-%d %H:%M")
     result = client.jql(
-        f"labels = '{SUMMARY_ALLOWED_LABEL}' ORDER BY updated DESC",
+        f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated > '{since_string}' ORDER BY updated DESC",
         limit=50,
         fields="key,updated",
     )
-    keys = [x["key"] for x in result["issues"]]  # type: ignore
+    if type(result) is not dict:
+        return []
+    keys = [issue["key"] for issue in result["issues"]]
     return keys
