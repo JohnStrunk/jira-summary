@@ -12,48 +12,18 @@
     ":pinDevDependencies"             // Pin dev dependencies also
   ],
   // Files to ignore
-  // "ignorePaths": [
-  //   "docs/requirements.txt"
-  // ],
+  "ignorePaths": [
+    ".venv"
+  ],
   "labels": [
     "dependencies"
   ],
   "lockFileMaintenance": {"enabled": true},
   "packageRules": [
     {
-      "description": "Update devcontainer images in a single PR",
-      "groupName": "devcontainer",
-      "matchFileNames": [".devcontainer/devcontainer.json"]
-    },
-    {
       "description": "Update renovatebot/pre-commit-hooks weekly to decrease noise",
       "matchPackageNames": ["renovatebot/pre-commit-hooks"],
       "schedule": ["before 9am on monday"]
-    }
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "devcontainer base image",
-      "fileMatch": [
-        "^.devcontainer/devcontainer.json$"
-      ],
-      "matchStrings": [
-        "\"image\"\\s*:\\s*\"(?<depName>.*?):(?<currentValue>.*?)(@(?<currentDigest>sha256:[a-f0-9]+))?\""
-      ],
-      "datasourceTemplate": "docker"
-    },
-    {
-      "customType": "regex",
-      "description": "devcontainer feature images",
-      "fileMatch": [
-        "^.devcontainer/devcontainer.json$"
-      ],
-      "matchStrings": [
-        // devcontainer features don't support sha256 digests
-        "\"(?<depName>.*?):(?<currentValue>.*?)\"\\s*:\\s*"
-      ],
-      "datasourceTemplate": "docker"
     }
   ],
   // "schedule": [

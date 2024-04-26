@@ -1,10 +1,7 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/debian
 {
 	"name": "Python",
 	"image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
 
-	// Features to add to the dev container. More info: https://containers.dev/features.
 	"features": {
 		"ghcr.io/devcontainers/features/docker-in-docker:2.10.2": {},
 		"ghcr.io/devcontainers/features/github-cli:1.0.11": {},
