@@ -8,6 +8,7 @@ import os
 import time
 from datetime import datetime
 
+import requests
 from atlassian import Jira
 
 from jiraissues import Issue
@@ -61,17 +62,20 @@ def main():
 
     while True:
         start_time = datetime.now()
-        issue_keys = get_issues_to_summarize(jira, since)
-        for issue_key in issue_keys:
-            issue_start_time = datetime.now()
-            issue = Issue(jira, issue_key)
-            summary = summarize_issue(
-                issue, max_depth=max_depth, send_updates=send_updates
-            )
-            elapsed = datetime.now() - issue_start_time
-            print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
-        print(f"Iteration elapsed time: {datetime.now() - start_time}")
-        print(f"Sleeping for {delay} seconds...")
+        try:
+            issue_keys = get_issues_to_summarize(jira, since)
+            for issue_key in issue_keys:
+                issue_start_time = datetime.now()
+                issue = Issue(jira, issue_key)
+                summary = summarize_issue(
+                    issue, max_depth=max_depth, send_updates=send_updates
+                )
+                elapsed = datetime.now() - issue_start_time
+                print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
+            print(f"Iteration elapsed time: {datetime.now() - start_time}")
+            print(f"Sleeping for {delay} seconds...")
+        except requests.exceptions.ReadTimeout:
+            logging.error("ReadTimeout exception")
         time.sleep(delay)
         since = start_time
 
