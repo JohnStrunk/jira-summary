@@ -107,3 +107,14 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
+
+  # This is a dummy job that can be used to determine success of CI:
+  # - by Mergify instead of having to list a bunch of other jobs
+  # - for branch protection rules
+  ci-success:
+    name: CI Workflow - Success
+    needs: [pre-commit, container]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Success
+        run: echo "Previous steps were successful"
