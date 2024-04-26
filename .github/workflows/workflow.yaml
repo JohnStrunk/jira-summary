@@ -107,6 +107,10 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
+          # https://docs.docker.com/build/cache/backends/gha/
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
 
   # This is a dummy job that can be used to determine success of CI:
   # - by Mergify instead of having to list a bunch of other jobs
