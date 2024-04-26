@@ -1,0 +1,47 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jira-summarizer
+  labels:
+    app: jira-summarizer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jira-summarizer
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: jira-summarizer
+    spec:
+      containers:
+        - name: summarizer
+          image: ghcr.io/johnstrunk/jira-summarizer:latest
+          args:
+            - "--log-level"
+            - "INFO"
+            - "--seconds"
+            - "300"
+          envFrom:
+            - secretRef:
+                name: jira-summarizer-secret
+                optional: false
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "10m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      securityContext:
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 5
