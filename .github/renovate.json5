@@ -5,9 +5,11 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",             // Use recommended settings
+    "docker:pinDigests",              // Pin container digests
     "helpers:pinGitHubActionDigests", // Pin GitHub action digests
     ":enablePreCommit",               // Enable updates to pre-commit repos
-    ":gitSignOff"                     // Add Signed-off-by line to commit messages
+    ":gitSignOff",                    // Add Signed-off-by line to commit messages
+    ":pinDevDependencies"             // Pin dev dependencies also
   ],
   // Files to ignore
   // "ignorePaths": [
@@ -18,13 +20,6 @@
   ],
   "lockFileMaintenance": {"enabled": true},
   "packageRules": [
-    {
-      "description": "Update golang tag in dockerfile & golang version in workflows in a single PR",
-      "groupName": "golang version",
-      "matchDepNames": [
-        "^golang$"
-      ]
-    },
     {
       "description": "Update devcontainer images in a single PR",
       "groupName": "devcontainer",

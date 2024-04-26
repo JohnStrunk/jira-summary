@@ -108,6 +108,10 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           # https://docs.docker.com/build/cache/backends/gha/
+          # Effect on build times (B&P step only):
+          #   No caching: 44s
+          #   Max mode, no cache: 79s
+          #   Max mode, perfect hit: 8s
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
