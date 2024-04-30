@@ -9,13 +9,14 @@ import time
 from datetime import datetime
 
 import requests
-from atlassian import Jira
+from atlassian import Jira  # type: ignore
 
 from jiraissues import Issue
 from summarizer import get_issues_to_summarize, summarize_issue
 
 
 def main():
+    """Main function for the bot."""
     parser = argparse.ArgumentParser(description="Summarizer bot")
     parser.add_argument(
         "-d",

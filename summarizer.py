@@ -7,7 +7,7 @@ import textwrap
 from datetime import datetime
 from typing import List, Tuple
 
-from atlassian import Jira
+from atlassian import Jira  # type: ignore
 from genai import Client, Credentials
 from genai.extensions.langchain import LangChainInterface
 from genai.schema import DecodingMethod, TextGenerationParameters
@@ -34,6 +34,7 @@ SUMMARY_ALLOWED_LABEL = "AISummary"
 _WRAP_COLUMN = 78
 
 
+# pylint: disable=too-many-locals
 def summarize_issue(
     issue: Issue,
     max_depth: int = 0,
@@ -58,11 +59,11 @@ def summarize_issue(
         A string containing the summary
     """
 
-    _logger.info(f"Summarizing {issue.key}...")
+    _logger.info("Summarizing %s...", issue.key)
     # If the current summary is up-to-date and we're not asked to regenerate it,
     # return what's there
     if not regenerate and is_summary_current(issue):
-        _logger.debug(f"Summary for {issue.key} is current, using that.")
+        _logger.debug("Summary for %s is current, using that.", issue.key)
         return get_aisummary(issue.description)
 
     # if we have not reached max-depth, summarize the child issues for inclusion in this summary
@@ -151,8 +152,8 @@ You are a helpful assistant who is an expert in software development.
 Here is the summary in a few sentences:
 """
 
-    _logger.info(f"Summarizing {issue.key} via LLM")
-    _logger.debug(f"Prompt:\n{llm_prompt}")
+    _logger.info("Summarizing %s via LLM", issue.key)
+    _logger.debug("Prompt:\n%s", llm_prompt)
 
     chat = _chat_model()
     summary = chat.invoke(llm_prompt).strip()
@@ -310,7 +311,7 @@ def get_issues_to_summarize(
         limit=50,
         fields="key,updated",
     )
-    if type(result) is not dict:
+    if not isinstance(result, dict):
         return []
     keys = [issue["key"] for issue in result["issues"]]
     return keys
