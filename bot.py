@@ -17,6 +17,7 @@ from summarizer import get_issues_to_summarize, summarize_issue
 
 def main():
     """Main function for the bot."""
+    # pylint: disable=duplicate-code
     parser = argparse.ArgumentParser(description="Summarizer bot")
     parser.add_argument(
         "-d",
