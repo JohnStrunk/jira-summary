@@ -78,27 +78,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
     Represents a Jira issue as a proper object.
     """
 
-    client: Jira
-    """The Jira client to use for API calls."""
-    key: str
-    """The key of the issue."""
-    summary: str
-    """The summary of the issue."""
-    description: str
-    """The description of the issue."""
-    issue_type: str
-    """The type of the issue."""
-    labels: List[str]
-    """The labels on the issue."""
-    resolution: str
-    """The resolution of the issue."""
-    status: str
-    """The status of the issue."""
-    _changelog: Optional[List[ChangelogEntry]]
-    _comments: Optional[List[Comment]]
-    _related: Optional[List[RelatedIssue]]
-
-    def __init__(self, client: Jira, issue_key: str):
+    def __init__(self, client: Jira, issue_key: str) -> None:
         self.client = client
         self.key = issue_key
 
@@ -114,27 +94,27 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         data = _check(client.issue(issue_key, fields=",".join(fields)))
 
         # Populate the fields
-        self.summary = data["fields"]["summary"]
-        self.description = data["fields"]["description"]
-        self.issue_type = data["fields"]["issuetype"]["name"]
-        self.status = data["fields"]["status"]["name"]
-        self.labels = data["fields"]["labels"]
-        self.resolution = (
+        self.summary: str = data["fields"]["summary"]
+        self.description: str = data["fields"]["description"]
+        self.issue_type: str = data["fields"]["issuetype"]["name"]
+        self.status: str = data["fields"]["status"]["name"]
+        self.labels: List[str] = data["fields"]["labels"]
+        self.resolution: str = (
             data["fields"]["resolution"]["name"]
             if data["fields"]["resolution"]
             else "Unresolved"
         )
-        self._changelog = None
-        self._comments = None
-        self._related = None
-        _logger.info(f"Retrieved issue: {self.key} - {self.summary}")
+        self._changelog: Optional[List[ChangelogEntry]] = None
+        self._comments: Optional[List[Comment]] = None
+        self._related: Optional[List[RelatedIssue]] = None
+        _logger.info("Retrieved issue: %s - %s", self.key, self.summary)
 
     def __str__(self) -> str:
         return f"{self.key}: {self.summary} ({self.status}/{self.resolution})"
 
     def _fetch_changelog(self) -> List[ChangelogEntry]:
         """Fetch the changelog from the API."""
-        _logger.debug(f"Retrieving changelog for {self.key}")
+        _logger.debug("Retrieving changelog for %s", self.key)
         log = _check(self.client.get_issue_changelog(self.key, start=0, limit=1000))
         items: List[ChangelogEntry] = []
         for entry in log["histories"]:
@@ -167,7 +147,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
 
     def _fetch_comments(self) -> List[Comment]:
         """Fetch the comments from the API."""
-        _logger.debug(f"Retrieving comments for {self.key}")
+        _logger.debug("Retrieving comments for %s", self.key)
         comments = _check(self.client.issue(self.key, fields="comment"))["fields"][
             "comment"
         ]["comments"]
@@ -198,7 +178,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             "customfield_12313140",
             "customfield_12318341",
         ]
-        _logger.debug(f"Retrieving related links for {self.key}")
+        _logger.debug("Retrieving related links for %s", self.key)
         data = _check(self.client.issue(self.key, fields=",".join(fields)))
         # Get the related issues
         related: List[RelatedIssue] = []
@@ -293,10 +273,11 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         Parameters:
             - new_description: The new description to set.
         """
-        _logger.info(f"Sending updated description for {self.key} to server")
+        _logger.info("Sending updated description for %s to server", self.key)
         fields = {"description": new_description}
         self.client.update_issue_field(self.key, fields)  # type: ignore
         self.description = new_description
+        issue_cache.remove(self.key)  # Invalidate any cached copy
 
 
 def _check(response: Any) -> dict:
@@ -312,3 +293,53 @@ def _check(response: Any) -> dict:
     if isinstance(response, dict):
         return response
     raise ValueError(f"Unexpected response: {response}")
+
+
+class IssueCache:
+    """
+    A cache of Jira issues to avoid fetching the same issue multiple times.
+    """
+
+    def __init__(self) -> None:
+        self._cache: dict[str, Issue] = {}
+        self.hits = 0
+        self.tries = 0
+
+    def get_issue(self, client: Jira, key: str) -> Issue:
+        """
+        Get an issue from the cache, or fetch it from the server if it's not
+        already cached.
+
+        Parameters:
+            - client: The Jira client to use for fetching the issue.
+            - key: The key of the issue to fetch.
+
+        Returns:
+            The issue object.
+        """
+        self.tries += 1
+        if key not in self._cache:
+            _logger.debug("Cache miss: %s", key)
+            self._cache[key] = Issue(client, key)
+        else:
+            self.hits += 1
+            _logger.debug("Cache hit: %s", key)
+        return self._cache[key]
+
+    def remove(self, key: str) -> None:
+        """
+        Remove an Issue from the cache.
+
+        Parameters:
+            - key: The key of the issue to remove.
+        """
+        if key in self._cache:
+            del self._cache[key]
+
+    def clear(self) -> None:
+        """Clear the cache."""
+        self._cache = {}
+
+
+# The global cache of issues
+issue_cache = IssueCache()

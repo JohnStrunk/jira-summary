@@ -6,13 +6,14 @@ import argparse
 import logging
 import os
 
-from atlassian import Jira
+from atlassian import Jira  # type: ignore
 
 from jiraissues import Issue
 from summarizer import summarize_issue
 
 
 def main():
+    """Main function"""
     parser = argparse.ArgumentParser(description="Summarize a JIRA issue")
     parser.add_argument(
         "-d",
