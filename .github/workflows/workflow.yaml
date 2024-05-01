@@ -89,8 +89,12 @@ jobs:
         uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa16ece964efeb # v3.3.0
         id: setup-buildx
 
+      - name: Expose variables required for actions cache
+        # https://github.com/crazy-max/ghaction-github-runtime
+        uses: crazy-max/ghaction-github-runtime@v3.0.0
+
       - name: Build devcontainer
-        run: npx -- @devcontainers/cli build --workspace-folder . --cache-from type=gha --cache-to type=gha,mode=max
+        run: npx -- @devcontainers/cli build --workspace-folder . --cache-from type=gha,scope=devcontainer --cache-to type=gha,mode=max,scope=devcontainer
 
   container:
     name: "Build (and push) container image"
