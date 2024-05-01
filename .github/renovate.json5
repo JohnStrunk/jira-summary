@@ -24,6 +24,11 @@
       "description": "Update renovatebot/pre-commit-hooks weekly to decrease noise",
       "matchPackageNames": ["renovatebot/pre-commit-hooks"],
       "schedule": ["before 9am on monday"]
+    },
+    {
+      "description": "Don't pin digests in devcontainer.json because it's not supported in features",
+      "matchManagers": ["devcontainer"],
+      "pinDigests": false
     }
   ],
   // "schedule": [
