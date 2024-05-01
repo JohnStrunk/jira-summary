@@ -1,15 +1,15 @@
 {
 	"name": "Python",
-	"image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm@sha256:907f5f276a1a670b0fc7da5fbf729c3edb3c03c384b8d7aa18b42ed01c66a1c2",
+	"image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
 
 	"features": {
-		"ghcr.io/devcontainers/features/docker-in-docker:2.10.2@sha256:23ae11a86089da5f0b98a6edd603f91831802b7f2d5ef1e104e1b94a3beb546c": {},
-		"ghcr.io/devcontainers/features/github-cli:1.0.11@sha256:464564228ccdd6028f01f8a62a3cfbaf76e9ba7953b29ac0e53ba2c262604312": {},
-		"ghcr.io/devcontainers/features/node:1.4.1@sha256:6c4f444d8e3eb68594d60ec128bce76a80647edc2b9a94960ca377895855145f": {},
-		"ghcr.io/devcontainers-contrib/features/act:1.0.14@sha256:3ec9cb495f2b7daba5af1657d40604815bc38af7e0c05a0578eae1c979d4b73a": {},
-		"ghcr.io/devcontainers-contrib/features/pipenv:2.0.17@sha256:8433b54279379b3d3fb732876076862e6c0994fd5eeac8ae81190cbc5431878c": {},
-		"ghcr.io/devcontainers-contrib/features/pre-commit:2.0.17@sha256:c18a7604e12b531e5a4e990c630e3f036d932903eb1e3b333e5c9e10a891e1a8": {},
-		"ghcr.io/dhoeric/features/hadolint:1.0.0@sha256:993e7e6f14b7f53aafefb081eb8396ea08f3d48aebb23c91fbaa10651ca0a835": {}
+		"ghcr.io/devcontainers/features/docker-in-docker:2.10.2": {},
+		"ghcr.io/devcontainers/features/github-cli:1.0.11": {},
+		"ghcr.io/devcontainers/features/node:1.4.1": {},
+		"ghcr.io/devcontainers-contrib/features/act:1.0.14": {},
+		"ghcr.io/devcontainers-contrib/features/pipenv:2.0.17": {},
+		"ghcr.io/devcontainers-contrib/features/pre-commit:2.0.17": {},
+		"ghcr.io/dhoeric/features/hadolint:1.0.0": {}
 	},
 
 	"customizations": {
