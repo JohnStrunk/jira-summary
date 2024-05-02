@@ -86,6 +86,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         fields = [
             "summary",
             "description",
+            "project",
             "status",
             "labels",
             "resolution",
@@ -97,6 +98,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         self.summary: str = data["fields"]["summary"]
         self.description: str = data["fields"]["description"]
         self.issue_type: str = data["fields"]["issuetype"]["name"]
+        self.project_key: str = data["fields"]["project"]["key"]
         self.status: str = data["fields"]["status"]["name"]
         self.labels: List[str] = data["fields"]["labels"]
         self.resolution: str = (

@@ -11,6 +11,8 @@ will ignore the `.env` file.*
 
 The following variables are required:
 
+- `ALLOWED_PROJECTS`: A comma-separated list of Jira project keys that the bot
+  is allowed to summarize (e.g., `ALLOWED_PROJECTS=OCTO,OCTOET`)
 - `GENAI_API`: The API endpoint for the IBM AI model (e.g., `https://...`)
 - `GENAI_KEY`: Your API key for the IBM AI model
 - `JIRA_TOKEN`: A JIRA PAT token that will allow retrieving issues from Jira as
