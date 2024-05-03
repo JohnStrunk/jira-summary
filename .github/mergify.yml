@@ -8,8 +8,7 @@ pull_request_rules:
       - "#approved-reviews-by>=1"
       - "#changes-requested-reviews-by=0"
       - label!=do-not-merge
-      # Branch protection rules are automatically enforced by GitHub/Mergify and
-      # need not be repeated here
+      - check-success=CI Workflow - Success
     actions:
       queue:
         merge_method: merge
@@ -22,6 +21,7 @@ pull_request_rules:
           - author=renovate-bot  # Renovate bot - dependency updates
       - "#changes-requested-reviews-by=0"
       - label!=do-not-merge
+      - check-success=CI Workflow - Success
     actions:
       queue:
         merge_method: merge
@@ -32,3 +32,4 @@ queue_rules:
       - base=main
       - "#changes-requested-reviews-by=0"
       - label!=do-not-merge
+      - check-success=CI Workflow - Success
