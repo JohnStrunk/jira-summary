@@ -26,8 +26,9 @@
       "schedule": ["before 9am on monday"]
     },
     {
-      "description": "Don't pin digests in devcontainer.json because it's not supported in features",
+      "description": "Devcontainer 'features' don't support digest pinning",
       "matchManagers": ["devcontainer"],
+      "matchDepTypes": ["feature"],
       "pinDigests": false
     }
   ],
