@@ -1,33 +1,54 @@
 {
+	// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+	// README at: https://github.com/devcontainers/templates/tree/main/src/debian
 	"name": "Python",
 	"image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm@sha256:c5b8bd1aa0c5c56c18de49024d2d67873612107c492ad0d8946c78c495e6ff0c",
 
+	// Features to add to the dev container. See: https://containers.dev/features
 	"features": {
 		"ghcr.io/devcontainers/features/docker-in-docker:2.10.2": {},
 		"ghcr.io/devcontainers/features/github-cli:1.0.11": {},
 		"ghcr.io/devcontainers/features/node:1.4.1": {},
-		"ghcr.io/devcontainers-contrib/features/act:1.0.14": {},
 		"ghcr.io/devcontainers-contrib/features/pipenv:2.0.17": {},
 		"ghcr.io/devcontainers-contrib/features/pre-commit:2.0.17": {},
 		"ghcr.io/dhoeric/features/hadolint:1.0.0": {}
 	},
 
+	"mounts": [
+		{   // Map github cli credentials into the dev environment
+			"source": "${localEnv:HOME}${localEnv:USERPROFILE}/.config/gh",
+			"target": "/home/vscode/.config/gh",
+			"type": "bind"
+		}
+	],
+
 	"customizations": {
 		"vscode": {
 			"extensions": [
+				// Make sure the Jupyter extension is installed since we have
+				// notebooks
 				"ms-toolsai.jupyter"
 			]
 		}
 	},
 
 	"containerEnv": {
+		// Ignore the system-wide packages and only use the ones in the virtual
+		// environment
 		"PIPENV_SITE_PACKAGES": "false",
+		// Install virtual environment into .venv in the local directory
 		"PIPENV_VENV_IN_PROJECT": "true",
+		// Don't complain if running pipenv from w/in a virtual environment,
+		// just use it. This is needed because vscode automatically activates
+		// the .venv virtual environment that pipenv creates
 		"PIPENV_VERBOSITY": "-1"
 	},
 
 	"postCreateCommand": {
+		// Install pre-commit hooks in the background since they can take a
+		// while, and we want to minimize waiting during `git commit`
 		"Initialize pre-commit environment": "nohup sh -c 'pre-commit install -f --install-hooks &' < /dev/null > /dev/null 2>&1",
+		// Install dependencies (including dev)
 		"Install python dependencies": "rm -rf .venv && pipenv sync --dev -v"
 	}
 }
