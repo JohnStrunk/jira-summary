@@ -4,7 +4,7 @@ import io
 import logging
 import os
 import textwrap
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import List, Tuple
 
 from atlassian import Jira  # type: ignore
@@ -13,7 +13,7 @@ from genai.extensions.langchain import LangChainInterface
 from genai.schema import DecodingMethod, TextGenerationParameters
 from langchain_core.language_models import LLM
 
-from jiraissues import Issue, RelatedIssue
+from jiraissues import Issue, Myself, RelatedIssue, issue_cache
 
 _logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def summarize_issue(
     child_summaries: List[Tuple[RelatedIssue, str]] = []
     for child in issue.children:
         if max_depth > 0:
-            child_issue = Issue(issue.client, child.key)
+            child_issue = issue_cache.get_issue(issue.client, child.key)
             child_summaries.append(
                 (
                     child,
@@ -101,7 +101,7 @@ def summarize_issue(
     # Only summarize the non-child related issues
     non_children = [rel for rel in issue.related if not rel.is_child]
     for related in non_children:
-        ri = Issue(issue.client, related.key)
+        ri = issue_cache.get_issue(issue.client, related.key)
         how = related.how
         if how == "Parent Link":
             how = "is a child of the parent issue"
@@ -111,7 +111,7 @@ def summarize_issue(
 
     for child, summary in child_summaries:
         if not summary:
-            ri = Issue(issue.client, child.key)
+            ri = issue_cache.get_issue(issue.client, child.key)
             related_block.write(f"* {issue.key} {child.how} {ri}\n")
         else:
             related_block.write(
@@ -221,6 +221,32 @@ def get_aisummary(text: str) -> str:
     return text[start + len(SUMMARY_START_MARKER) : end].strip()
 
 
+def summary_last_updated(issue: Issue) -> datetime:
+    """
+    Get the last time the summary was updated.
+
+    Parameters:
+        - issue: The issue to check
+
+    Returns:
+        The last time the summary was updated
+    """
+    last_update = datetime.fromisoformat("1900-01-01").astimezone(UTC)
+
+    # The summary is never in the initial creation of the issue, therefore,
+    # there will be a record of it in the changelog.
+    if issue.last_change is None or SUMMARY_START_MARKER not in issue.description:
+        return last_update
+
+    for change in issue.changelog:
+        if change.author == Myself(issue.client).display_name and "description" in [
+            chg.field for chg in change.changes
+        ]:
+            last_update = max(last_update, change.created)
+
+    return last_update
+
+
 def is_summary_current(issue: Issue) -> bool:
     """
     Determine if the AI summary is up-to-date for the issue.
@@ -234,12 +260,15 @@ def is_summary_current(issue: Issue) -> bool:
     Returns:
         True if the summary is current, False otherwise
     """
-    return (
-        issue.last_change is not None
-        and issue.is_last_change_mine
-        and "description" in [chg.field for chg in issue.last_change.changes]
-        and SUMMARY_START_MARKER in issue.description
-    )
+    if SUMMARY_ALLOWED_LABEL not in issue.labels:
+        return True  # We're not allowed to summarize it, so it's always current
+
+    last_update = summary_last_updated(issue)
+    for child in issue.children:
+        child_issue = issue_cache.get_issue(issue.client, child.key)
+        if child_issue.updated > last_update:
+            return False
+    return issue.updated == last_update
 
 
 def is_ok_to_post_summary(issue: Issue) -> bool:
@@ -312,13 +341,47 @@ def get_issues_to_summarize(
     Returns:
         A list of issue keys
     """
-    since_string = since.strftime("%Y-%m-%d %H:%M")
-    result = client.jql(
-        f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated > '{since_string}' ORDER BY updated DESC",
+    # The time format for the query needs to be in the local timezone of the
+    # user, so we need to convert
+    user_zi = Myself(client).tzinfo
+    since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
+    updated_issues = client.jql(
+        f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated DESC",
         limit=50,
         fields="key,updated",
     )
-    if not isinstance(result, dict):
+    if not isinstance(updated_issues, dict):
         return []
-    keys = [issue["key"] for issue in result["issues"]]
+    keys: List[str] = [issue["key"] for issue in updated_issues["issues"]]
+    # Filter out any issues that are not in the allowed projects
+    filtered_keys = []
+    for key in keys:
+        # Refresh the issue cache to ensure we have the latest data in cache.
+        # This is definitely needed since the keys are the result of the query
+        # for recently updated issues.
+        issue = issue_cache.get_issue(client, key, refresh=True)
+        if is_ok_to_post_summary(issue):
+            filtered_keys.append(key)
+    keys = filtered_keys
+
+    _logger.info("Issues updated since %s: %s", since_string, ", ".join(keys))
+
+    # Given the updated issues, we also need to propagate the summaries up the
+    # hierarchy. We first need to add the parent issues of all the updated
+    # issues to the list of issues to summarize.
+    all_keys = keys.copy()
+    for key in keys:
+        parents = issue_cache.get_issue(client, key).all_parents
+        # Go through the parent issues, and add them to the list of issues to
+        # summarize, but only if they are marked for summarization.
+        for parent in parents:
+            if parent not in all_keys:
+                issue = issue_cache.get_issue(client, parent, refresh=True)
+                if is_ok_to_post_summary(issue):
+                    all_keys.append(parent)
+                else:
+                    break
+    # Sort the keys by level so that we summarize the children before the
+    # parents, making the updated summaries available to the parents.
+    keys = sorted(set(all_keys), key=lambda x: issue_cache.get_issue(client, x).level)
     return keys
