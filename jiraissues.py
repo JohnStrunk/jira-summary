@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, List, Optional
+from zoneinfo import ZoneInfo
 
 from atlassian import Jira  # type: ignore
 
@@ -86,19 +87,24 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         fields = [
             "summary",
             "description",
+            "issuetype",
+            "parent",
             "project",
             "status",
             "labels",
             "resolution",
-            "issuetype",
+            "updated",
         ]
         data = _check(client.issue(issue_key, fields=",".join(fields)))
 
         # Populate the fields
         self.summary: str = data["fields"]["summary"]
-        self.description: str = data["fields"]["description"]
+        self.description: str = data["fields"]["description"] or ""
         self.issue_type: str = data["fields"]["issuetype"]["name"]
         self.project_key: str = data["fields"]["project"]["key"]
+        self._parent_key: Optional[str] = (
+            data.get("fields", {}).get("parent", {}).get("key", None)
+        )
         self.status: str = data["fields"]["status"]["name"]
         self.labels: List[str] = data["fields"]["labels"]
         self.resolution: str = (
@@ -106,6 +112,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             if data["fields"]["resolution"]
             else "Unresolved"
         )
+        self.updated: datetime = datetime.fromisoformat(data["fields"]["updated"])
         self._changelog: Optional[List[ChangelogEntry]] = None
         self._comments: Optional[List[Comment]] = None
         self._related: Optional[List[RelatedIssue]] = None
@@ -253,11 +260,76 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         return [rel for rel in self.related if rel.is_child]
 
     @property
+    def parent(self) -> Optional[str]:
+        """The parent issue of this issue."""
+        if self._parent_key:
+            return self._parent_key
+        for rel in self.related:
+            if rel.how in ["Epic Link", "Parent Link"]:
+                return rel.key
+        return None
+
+    @property
+    def all_parents(self) -> List[str]:
+        """All the parent issues of this issue."""
+        parents = []
+        issue = issue_cache.get_issue(self.client, self.key)
+        while issue.parent:
+            parents.append(issue.parent)
+            issue = issue_cache.get_issue(self.client, issue.parent)
+        return parents
+
+    @property
+    def level(self) -> int:
+        """The level of this issue in the hierarchy."""
+        # https://spaces.redhat.com/pages/viewpage.action?spaceKey=JiraAid&title=Red+Hat+Standards%3A+Issue+Types
+        level_mapping: dict[str, int] = {
+            "Sub-task": 1,
+            ### Level 2 ###
+            "Bug": 2,
+            "Change Request": 2,
+            "Closed Loop": 2,
+            "Component Upgrade": 2,
+            "Enhancement": 2,
+            "Incident": 2,
+            "Risk": 2,
+            "Spike": 2,
+            "Story": 2,
+            "Support Patch": 2,
+            "Task": 2,
+            "Ticket": 2,
+            ### Level 3 ###
+            "Epic": 3,
+            "Release Milestone": 3,
+            ### Level 4 ###
+            "Feature": 4,
+            "Feature Request": 4,
+            "Initiative": 4,
+            "Release Tracker": 4,
+            "Requirement": 4,
+            ### Level 5 ###
+            "Outcome": 5,
+            ### Level 6 ###
+            "Strategic Goal": 6,
+        }
+        level = level_mapping.get(self.issue_type, 0)
+        if level == 0:
+            _logger.warning("Unknown issue type: %s", self.issue_type)
+        return level
+
+    @property
     def last_change(self) -> Optional[ChangelogEntry]:
         """Get the last change in the changelog."""
         if not self.changelog:
             return None
         return self.changelog[len(self.changelog) - 1]
+
+    @property
+    def last_comment(self) -> Optional[Comment]:
+        """Get the last comment on the issue."""
+        if not self.comments:
+            return None
+        return self.comments[len(self.comments) - 1]
 
     @property
     def is_last_change_mine(self) -> bool:
@@ -297,6 +369,21 @@ def _check(response: Any) -> dict:
     raise ValueError(f"Unexpected response: {response}")
 
 
+class Myself:  # pylint: disable=too-few-public-methods
+    """
+    Represents the current user in Jira.
+    """
+
+    def __init__(self, client: Jira) -> None:
+        self.client = client
+        self._data = _check(client.myself())
+        # Break out the fields we care about
+        self.display_name: str = self._data["displayName"]
+        self.key: str = self._data["key"]
+        self.timezone: str = self._data["timeZone"]
+        self.tzinfo = ZoneInfo(self.timezone)
+
+
 class IssueCache:
     """
     A cache of Jira issues to avoid fetching the same issue multiple times.
@@ -307,7 +394,7 @@ class IssueCache:
         self.hits = 0
         self.tries = 0
 
-    def get_issue(self, client: Jira, key: str) -> Issue:
+    def get_issue(self, client: Jira, key: str, refresh: bool = False) -> Issue:
         """
         Get an issue from the cache, or fetch it from the server if it's not
         already cached.
@@ -320,7 +407,7 @@ class IssueCache:
             The issue object.
         """
         self.tries += 1
-        if key not in self._cache:
+        if refresh or key not in self._cache:
             _logger.debug("Cache miss: %s", key)
             self._cache[key] = Issue(client, key)
         else:
