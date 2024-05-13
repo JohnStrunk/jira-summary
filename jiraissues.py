@@ -10,6 +10,12 @@ from atlassian import Jira  # type: ignore
 
 _logger = logging.getLogger(__name__)
 
+# Custom field IDs
+_CF_EPIC_LINK = "customfield_12311140"  # any
+_CF_FEATURE_LINK = "customfield_12318341"  # issuelinks
+_CF_PARENT_LINK = "customfield_12313140"  # any
+_CF_STATUS_SUMMARY = "customfield_12320841"  # string
+
 
 @dataclass
 class Change:
@@ -94,6 +100,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             "labels",
             "resolution",
             "updated",
+            _CF_STATUS_SUMMARY,
         ]
         data = _check(client.issue(issue_key, fields=",".join(fields)))
 
@@ -113,6 +120,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             else "Unresolved"
         )
         self.updated: datetime = datetime.fromisoformat(data["fields"]["updated"])
+        self.status_summary: str = data["fields"].get(_CF_STATUS_SUMMARY) or ""
         self._changelog: Optional[List[ChangelogEntry]] = None
         self._comments: Optional[List[Comment]] = None
         self._related: Optional[List[RelatedIssue]] = None
@@ -183,9 +191,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         fields = [
             "issuelinks",
             "subtasks",
-            "customfield_12311140",
-            "customfield_12313140",
-            "customfield_12318341",
+            _CF_EPIC_LINK,
+            _CF_PARENT_LINK,
+            _CF_FEATURE_LINK,
         ]
         _logger.debug("Retrieving related links for %s", self.key)
         data = _check(self.client.issue(self.key, fields=",".join(fields)))
@@ -211,8 +219,8 @@ class Issue:  # pylint: disable=too-many-instance-attributes
 
         # Get the parent task(s) and epic links from the custom fields
         custom_fields = [
-            ("customfield_12311140", "Epic Link"),  # Upward link to epic
-            ("customfield_12313140", "Parent Link"),
+            (_CF_EPIC_LINK, "Epic Link"),  # Upward link to epic
+            (_CF_PARENT_LINK, "Parent Link"),
         ]
         for cfield, how in custom_fields:
             if cfield in data["fields"].keys() and data["fields"][cfield] is not None:
@@ -220,12 +228,12 @@ class Issue:  # pylint: disable=too-many-instance-attributes
 
         # The Feature Link has to be handled separately
         if (
-            "customfield_12318341" in data["fields"].keys()
-            and data["fields"]["customfield_12318341"] is not None
+            _CF_FEATURE_LINK in data["fields"].keys()
+            and data["fields"][_CF_FEATURE_LINK] is not None
         ):
             related.append(
                 RelatedIssue(
-                    key=data["fields"]["customfield_12318341"]["key"],
+                    key=data["fields"][_CF_FEATURE_LINK]["key"],
                     how="Feature Link",
                 )
             )
@@ -340,17 +348,17 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             and self.last_change.author == me["displayName"]
         )
 
-    def update_description(self, new_description: str) -> None:
+    def update_status_summary(self, contents: str) -> None:
         """
         UPDATE the Jira issue's description ON THE SERVER.
 
         Parameters:
-            - new_description: The new description to set.
+            - contents: The new description to set.
         """
-        _logger.info("Sending updated description for %s to server", self.key)
-        fields = {"description": new_description}
+        _logger.info("Sending updated status summary for %s to server", self.key)
+        fields = {_CF_STATUS_SUMMARY: contents}
         self.client.update_issue_field(self.key, fields)  # type: ignore
-        self.description = new_description
+        self.status_summary = contents
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
 
