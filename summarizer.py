@@ -165,7 +165,7 @@ Here is a short summary in less than 100 words:
         new_description = (
             strip_aisummary(issue.description) + "\n\n" + wrap_aisummary(summary)
         )
-        issue.update_description(new_description)
+        issue.update_status_summary(new_description)
 
     return textwrap.fill(summary, width=_WRAP_COLUMN)
 
