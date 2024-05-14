@@ -5,7 +5,7 @@ import logging
 import os
 import textwrap
 from datetime import UTC, datetime
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from atlassian import Jira  # type: ignore
 from genai import Client, Credentials
@@ -13,6 +13,7 @@ from genai.extensions.langchain import LangChainInterface
 from genai.schema import DecodingMethod, TextGenerationParameters
 from langchain_core.language_models import LLM
 
+import text_wrapper
 from jiraissues import Issue, Myself, RelatedIssue, issue_cache
 
 _logger = logging.getLogger(__name__)
@@ -35,6 +36,20 @@ SUMMARY_ALLOWED_LABEL = "AISummary"
 
 # The default column width to wrap text to.
 _WRAP_COLUMN = 78
+
+_wrapper = text_wrapper.TextWrapper(SUMMARY_START_MARKER, SUMMARY_END_MARKER)
+
+_self: Optional[Myself] = None
+
+
+def self(client: Jira) -> Myself:
+    """
+    Caching function for the Myself object.
+    """
+    global _self  # pylint: disable=global-statement
+    if _self is None:
+        _self = Myself(client)
+    return _self
 
 
 # pylint: disable=too-many-locals
@@ -67,7 +82,7 @@ def summarize_issue(
     # return what's there
     if not regenerate and is_summary_current(issue):
         _logger.debug("Summary for %s is current, using that.", issue.key)
-        return get_aisummary(issue.description)
+        return _wrapper.get(issue.status_summary) or ""
 
     # if we have not reached max-depth, summarize the child issues for inclusion in this summary
     child_summaries: List[Tuple[RelatedIssue, str]] = []
@@ -132,7 +147,7 @@ Title: {issue.key} - {issue.summary}
 Status/Resolution: {issue.status}/{issue.resolution}
 
 === Description ===
-{strip_aisummary(issue.description)}
+{issue.description}
 
 === Comments ===
 {comment_block.getvalue()}
@@ -147,12 +162,12 @@ You are a helpful assistant who is an expert in software development.
 * Include an overview of any significant discussions or decisions, with their reasoning and outcome.
 * Highlight any recent updates or changes that effect the completion of the issue.
 * Use only the information below to create your summary.
+* Include only the text of your summary in the response with no formatting.
+* Limit your summary to 100 words or less.
 
 ```
 {full_description}
 ```
-
-Here is a short summary in less than 100 words:
 """
 
     _logger.info("Summarizing %s via LLM", issue.key)
@@ -160,65 +175,13 @@ Here is a short summary in less than 100 words:
 
     chat = _chat_model()
     summary = chat.invoke(llm_prompt, stop=["<|endoftext|>"]).strip()
+    folded_summary = textwrap.fill(summary, width=_WRAP_COLUMN)
     if send_updates and is_ok_to_post_summary(issue):
         # Replace any existing AI summary w/ the updated one
-        new_description = (
-            strip_aisummary(issue.description) + "\n\n" + wrap_aisummary(summary)
+        issue.update_status_summary(
+            _wrapper.upsert(issue.status_summary, folded_summary)
         )
-        issue.update_status_summary(new_description)
-
-    return textwrap.fill(summary, width=_WRAP_COLUMN)
-
-
-def wrap_aisummary(text: str, width: int = _WRAP_COLUMN) -> str:
-    """
-    Wrap the AI summary in markers so it can be stripped later, and wrap the
-    text to the specified width so that it is easier to read.
-
-    Parameters:
-        - text: The text to wrap.
-        - width: The width to wrap the text to.
-
-    Returns:
-        The wrapped text.
-    """
-    return f"{SUMMARY_START_MARKER}\n{textwrap.fill(text, width=width)}\n{SUMMARY_END_MARKER}"
-
-
-def strip_aisummary(text: str) -> str:
-    """
-    Remove the AI summary from a block of text. This removes the summary by
-    finding the start and end markers, and removing all the text beween.
-
-    Parameters:
-        - text: The text to strip.
-
-    Returns:
-        The text with the summary removed.
-    """
-    start = text.find(SUMMARY_START_MARKER)
-    end = text.find(SUMMARY_END_MARKER)
-    if start == -1 or end == -1:
-        return text
-    return text[:start] + text[end + len(SUMMARY_END_MARKER) :]
-
-
-def get_aisummary(text: str) -> str:
-    """
-    Extract the AI summary from a block of text. This extracts the summary by
-    finding the start and end markers, and returning the text beween.
-
-    Parameters:
-        - text: The text to extract the summary from.
-
-    Returns:
-        The extracted summary.
-    """
-    start = text.find(SUMMARY_START_MARKER)
-    end = text.find(SUMMARY_END_MARKER)
-    if start == -1 or end == -1:
-        return ""
-    return text[start + len(SUMMARY_START_MARKER) : end].strip()
+    return folded_summary
 
 
 def summary_last_updated(issue: Issue) -> datetime:
@@ -235,11 +198,11 @@ def summary_last_updated(issue: Issue) -> datetime:
 
     # The summary is never in the initial creation of the issue, therefore,
     # there will be a record of it in the changelog.
-    if issue.last_change is None or SUMMARY_START_MARKER not in issue.description:
+    if issue.last_change is None or SUMMARY_START_MARKER not in issue.status_summary:
         return last_update
 
     for change in issue.changelog:
-        if change.author == Myself(issue.client).display_name and "description" in [
+        if change.author == self(issue.client).display_name and "Status Summary" in [
             chg.field for chg in change.changes
         ]:
             last_update = max(last_update, change.created)
@@ -261,14 +224,34 @@ def is_summary_current(issue: Issue) -> bool:
         True if the summary is current, False otherwise
     """
     if SUMMARY_ALLOWED_LABEL not in issue.labels:
-        return True  # We're not allowed to summarize it, so it's always current
+        _logger.debug(
+            "is_summary_current: no - Issue %s is not allowed to have a summary",
+            issue.key,
+        )
+        return False  # We're not allowed to summarize it, so it's never current
 
     last_update = summary_last_updated(issue)
+    if issue.updated > last_update:
+        # It's been changed since we last updated the summary
+        _logger.debug(
+            "is_summary_current: no - Issue %s has been updated more recently than summary %s > %s",
+            issue.key,
+            issue.updated.isoformat(),
+            last_update.isoformat(),
+        )
+        return False
     for child in issue.children:
         child_issue = issue_cache.get_issue(issue.client, child.key)
         if child_issue.updated > last_update:
+            # A child issue has been updated since we last updated the summary
+            _logger.debug(
+                "is_summary_current: no - Issue %s has more recently updated child %s",
+                issue.key,
+                child_issue.key,
+            )
             return False
-    return issue.updated == last_update
+    _logger.debug("is_summary_current: yes - Issue %s is current", issue.key)
+    return True
 
 
 def is_ok_to_post_summary(issue: Issue) -> bool:
@@ -343,7 +326,7 @@ def get_issues_to_summarize(
     """
     # The time format for the query needs to be in the local timezone of the
     # user, so we need to convert
-    user_zi = Myself(client).tzinfo
+    user_zi = self(client).tzinfo
     since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
     updated_issues = client.jql(
         f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated DESC",
