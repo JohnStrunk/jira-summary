@@ -11,10 +11,10 @@ from atlassian import Jira  # type: ignore
 _logger = logging.getLogger(__name__)
 
 # Custom field IDs
-_CF_EPIC_LINK = "customfield_12311140"  # any
-_CF_FEATURE_LINK = "customfield_12318341"  # issuelinks
-_CF_PARENT_LINK = "customfield_12313140"  # any
-_CF_STATUS_SUMMARY = "customfield_12320841"  # string
+CF_EPIC_LINK = "customfield_12311140"  # any
+CF_FEATURE_LINK = "customfield_12318341"  # issuelinks
+CF_PARENT_LINK = "customfield_12313140"  # any
+CF_STATUS_SUMMARY = "customfield_12320841"  # string
 
 
 @dataclass
@@ -100,7 +100,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             "labels",
             "resolution",
             "updated",
-            _CF_STATUS_SUMMARY,
+            CF_STATUS_SUMMARY,
         ]
         data = _check(client.issue(issue_key, fields=",".join(fields)))
 
@@ -120,7 +120,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             else "Unresolved"
         )
         self.updated: datetime = datetime.fromisoformat(data["fields"]["updated"])
-        self.status_summary: str = data["fields"].get(_CF_STATUS_SUMMARY) or ""
+        self.status_summary: str = data["fields"].get(CF_STATUS_SUMMARY) or ""
         self._changelog: Optional[List[ChangelogEntry]] = None
         self._comments: Optional[List[Comment]] = None
         self._related: Optional[List[RelatedIssue]] = None
@@ -186,57 +186,69 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             self._comments = self._fetch_comments()
         return self._comments
 
-    def _fetch_related(self) -> List[RelatedIssue]:
+    def _fetch_related(self) -> List[RelatedIssue]:  # pylint: disable=too-many-branches
         """Fetch the related issues from the API."""
         fields = [
             "issuelinks",
             "subtasks",
-            _CF_EPIC_LINK,
-            _CF_PARENT_LINK,
-            _CF_FEATURE_LINK,
+            CF_EPIC_LINK,
+            CF_PARENT_LINK,
+            CF_FEATURE_LINK,
         ]
+        found_issues: set[str] = set()
         _logger.debug("Retrieving related links for %s", self.key)
         data = _check(self.client.issue(self.key, fields=",".join(fields)))
         # Get the related issues
         related: List[RelatedIssue] = []
         for link in data["fields"]["issuelinks"]:
-            if "inwardIssue" in link:
+            if "inwardIssue" in link and link["inwardIssue"]["key"] not in found_issues:
                 related.append(
                     RelatedIssue(
                         key=link["inwardIssue"]["key"], how=link["type"]["inward"]
                     )
                 )
-            elif "outwardIssue" in link:
+                found_issues.add(link["inwardIssue"]["key"])
+            elif (
+                "outwardIssue" in link
+                and link["outwardIssue"]["key"] not in found_issues
+            ):
                 related.append(
                     RelatedIssue(
                         key=link["outwardIssue"]["key"], how=link["type"]["outward"]
                     )
                 )
+                found_issues.add(link["outwardIssue"]["key"])
 
         # Get the sub-tasks
         for subtask in data["fields"]["subtasks"]:
-            related.append(RelatedIssue(key=subtask["key"], how=_HOW_SUBTASK))
+            if subtask["key"] not in found_issues:
+                related.append(RelatedIssue(key=subtask["key"], how=_HOW_SUBTASK))
+                found_issues.add(subtask["key"])
 
         # Get the parent task(s) and epic links from the custom fields
         custom_fields = [
-            (_CF_EPIC_LINK, "Epic Link"),  # Upward link to epic
-            (_CF_PARENT_LINK, "Parent Link"),
+            (CF_EPIC_LINK, "Epic Link"),  # Upward link to epic
+            (CF_PARENT_LINK, "Parent Link"),
         ]
         for cfield, how in custom_fields:
             if cfield in data["fields"].keys() and data["fields"][cfield] is not None:
-                related.append(RelatedIssue(key=data["fields"][cfield], how=how))
+                if data["fields"][cfield] not in found_issues:
+                    related.append(RelatedIssue(key=data["fields"][cfield], how=how))
+                    found_issues.add(data["fields"][cfield])
 
         # The Feature Link has to be handled separately
         if (
-            _CF_FEATURE_LINK in data["fields"].keys()
-            and data["fields"][_CF_FEATURE_LINK] is not None
+            CF_FEATURE_LINK in data["fields"].keys()
+            and data["fields"][CF_FEATURE_LINK] is not None
         ):
-            related.append(
-                RelatedIssue(
-                    key=data["fields"][_CF_FEATURE_LINK]["key"],
-                    how="Feature Link",
+            if data["fields"][CF_FEATURE_LINK]["key"] not in found_issues:
+                related.append(
+                    RelatedIssue(
+                        key=data["fields"][CF_FEATURE_LINK]["key"],
+                        how="Feature Link",
+                    )
                 )
-            )
+                found_issues.add(data["fields"][CF_FEATURE_LINK]["key"])
 
         # Issues in the epic requires a query since there's no pointer from the epic
         # issue to it's children. epic_issues returns an error if the issue is not
@@ -244,14 +256,18 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         if self.issue_type == "Epic":
             issues_in_epic = _check(self.client.epic_issues(self.key, fields="key"))
             for i in issues_in_epic["issues"]:
-                related.append(RelatedIssue(key=i["key"], how=_HOW_INEPIC))
+                if i["key"] not in found_issues:
+                    related.append(RelatedIssue(key=i["key"], how=_HOW_INEPIC))
+                    found_issues.add(i["key"])
         else:
             # Non-epic issues use the parent link
             issues_with_parent = _check(
                 self.client.jql(f"'Parent Link' = '{self.key}'", limit=50, fields="key")
             )
             for i in issues_with_parent["issues"]:
-                related.append(RelatedIssue(key=i["key"], how=_HOW_INPARENT))
+                if i["key"] not in found_issues:
+                    related.append(RelatedIssue(key=i["key"], how=_HOW_INPARENT))
+                    found_issues.add(i["key"])
 
         return related
 
@@ -356,7 +372,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             - contents: The new description to set.
         """
         _logger.info("Sending updated status summary for %s to server", self.key)
-        fields = {_CF_STATUS_SUMMARY: contents}
+        fields = {CF_STATUS_SUMMARY: contents}
         self.client.update_issue_field(self.key, fields)  # type: ignore
         self.status_summary = contents
         issue_cache.remove(self.key)  # Invalidate any cached copy
