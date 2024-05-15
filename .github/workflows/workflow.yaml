@@ -173,7 +173,7 @@ jobs:
         # Match the push condition above
         if: github.event_name != 'pull_request'
         # https://github.com/actions/attest-build-provenance
-        uses: actions/attest-build-provenance@v1.1.1
+        uses: actions/attest-build-provenance@951c0c5f8e375ad4efad33405ab77f7ded2358e4 # v1.1.1
         with:
           subject-name: ${{ env.CONTAINER_IMAGE }}
           subject-digest: ${{ steps.push.outputs.digest }}
