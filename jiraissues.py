@@ -3,6 +3,7 @@
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from time import sleep
 from typing import Any, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -15,6 +16,9 @@ CF_EPIC_LINK = "customfield_12311140"  # any
 CF_FEATURE_LINK = "customfield_12318341"  # issuelinks
 CF_PARENT_LINK = "customfield_12313140"  # any
 CF_STATUS_SUMMARY = "customfield_12320841"  # string
+
+# How long to delay between API calls
+CALL_DELAY_SECONDS: float = 0.2
 
 
 @dataclass
@@ -388,6 +392,7 @@ def _check(response: Any) -> dict:
     general, when things go well, you get back a dict. Otherwise, you could get
     anything.
     """
+    sleep(CALL_DELAY_SECONDS)
     if isinstance(response, dict):
         return response
     raise ValueError(f"Unexpected response: {response}")
@@ -418,7 +423,7 @@ class IssueCache:
         self.hits = 0
         self.tries = 0
 
-    def get_issue(self, client: Jira, key: str, refresh: bool = False) -> Issue:
+    def get_issue(self, client: Jira, key: str) -> Issue:
         """
         Get an issue from the cache, or fetch it from the server if it's not
         already cached.
@@ -431,7 +436,7 @@ class IssueCache:
             The issue object.
         """
         self.tries += 1
-        if refresh or key not in self._cache:
+        if key not in self._cache:
             _logger.debug("Cache miss: %s", key)
             self._cache[key] = Issue(client, key)
         else:

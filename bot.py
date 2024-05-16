@@ -69,7 +69,7 @@ def main():
             issue_keys = get_issues_to_summarize(jira, since)
             for issue_key in issue_keys:
                 issue_start_time = datetime.now()
-                issue = issue_cache.get_issue(jira, issue_key, refresh=True)
+                issue = issue_cache.get_issue(jira, issue_key)
                 summary = summarize_issue(
                     issue, max_depth=max_depth, send_updates=send_updates
                 )
@@ -77,9 +77,9 @@ def main():
                 print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
             since = start_time  # Only update if we succeeded
         except requests.exceptions.HTTPError as error:
-            logging.error("HTTPError exception: %s", error)
+            logging.error("HTTPError exception: %s", error, stack_info=True)
         except requests.exceptions.ReadTimeout as error:
-            logging.error("ReadTimeout exception: %s", error)
+            logging.error("ReadTimeout exception: %s", error, stack_info=True)
         logging.info(
             "Cache stats: %d hits, %d total", issue_cache.hits, issue_cache.tries
         )
