@@ -350,11 +350,9 @@ def get_issues_to_summarize(
     keys: List[str] = [issue["key"] for issue in updated_issues["issues"]]
     # Filter out any issues that are not in the allowed projects
     filtered_keys = []
+    issue_cache.clear()  # Clear the cache to ensure we have the latest data
     for key in keys:
-        # Refresh the issue cache to ensure we have the latest data in cache.
-        # This is definitely needed since the keys are the result of the query
-        # for recently updated issues.
-        issue = issue_cache.get_issue(client, key, refresh=True)
+        issue = issue_cache.get_issue(client, key)
         if is_ok_to_post_summary(issue):
             filtered_keys.append(key)
     keys = filtered_keys
@@ -371,7 +369,7 @@ def get_issues_to_summarize(
         # summarize, but only if they are marked for summarization.
         for parent in parents:
             if parent not in all_keys:
-                issue = issue_cache.get_issue(client, parent, refresh=True)
+                issue = issue_cache.get_issue(client, parent)
                 if is_ok_to_post_summary(issue):
                     all_keys.append(parent)
                 else:
