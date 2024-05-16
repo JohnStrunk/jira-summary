@@ -5,12 +5,17 @@ import logging
 import os
 import textwrap
 from datetime import UTC, datetime
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from atlassian import Jira  # type: ignore
 from genai import Client, Credentials
 from genai.extensions.langchain import LangChainInterface
-from genai.schema import DecodingMethod, TextGenerationParameters
+from genai.schema import (
+    DecodingMethod,
+    TextGenerationParameters,
+    TextTokenizationParameters,
+    TextTokenizationReturnOptions,
+)
 from langchain_core.language_models import LLM
 
 import text_wrapper
@@ -170,7 +175,9 @@ You are a helpful assistant who is an expert in software development.
 ```
 """
 
-    _logger.info("Summarizing %s via LLM", issue.key)
+    _logger.info(
+        "Summarizing %s (%d tokens) via LLM", issue.key, count_tokens(llm_prompt)
+    )
     _logger.debug("Prompt:\n%s", llm_prompt)
 
     chat = _chat_model()
@@ -273,6 +280,14 @@ def is_ok_to_post_summary(issue: Issue) -> bool:
     return has_summary_label and is_in_allowed_project
 
 
+def _genai_client() -> Client:
+    genai_key = os.environ["GENAI_KEY"]
+    genai_url = os.environ["GENAI_API"]
+    credentials = Credentials(api_key=genai_key, api_endpoint=genai_url)
+    client = Client(credentials=credentials)
+    return client
+
+
 def _chat_model(model_name: str = _MODEL_ID) -> LLM:
     """
     Return a chat model to use for summarization.
@@ -282,10 +297,7 @@ def _chat_model(model_name: str = _MODEL_ID) -> LLM:
     environment variables.
     """
     # https://ibm.github.io/ibm-generative-ai/v2.3.0/rst_source/examples.extensions.langchain.langchain_chat_stream.html
-    genai_key = os.environ["GENAI_KEY"]
-    genai_url = os.environ["GENAI_API"]
-    credentials = Credentials(api_key=genai_key, api_endpoint=genai_url)
-    client = Client(credentials=credentials)
+    client = _genai_client()
 
     return LangChainInterface(
         model_id=model_name,
@@ -368,3 +380,34 @@ def get_issues_to_summarize(
     # parents, making the updated summaries available to the parents.
     keys = sorted(set(all_keys), key=lambda x: issue_cache.get_issue(client, x).level)
     return keys
+
+
+def count_tokens(text: Union[str, list[str]]) -> int:
+    """
+    Count the number of tokens in a string.
+
+    This function counts the number of tokens in a string
+
+    Parameters:
+        - text: The text to count tokens in
+
+    Returns:
+        The number of tokens in the text
+    """
+    client = _genai_client()
+    response = client.text.tokenization.create(
+        model_id=_MODEL_ID,
+        input=text,  # str | list[str]
+        parameters=TextTokenizationParameters(
+            return_options=TextTokenizationReturnOptions(
+                input_text=False,
+                tokens=False,
+            ),
+        ),
+    )
+
+    total_tokens = 0
+    for resp in response:
+        for result in resp.results:
+            total_tokens += result.token_count
+    return total_tokens
