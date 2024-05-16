@@ -24,7 +24,7 @@ spec:
             - "--log-level"
             - "INFO"
             - "--seconds"
-            - "300"
+            - "120"
           envFrom:
             - secretRef:
                 name: jira-summarizer-secret

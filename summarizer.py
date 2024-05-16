@@ -5,7 +5,7 @@ import logging
 import os
 import textwrap
 from datetime import UTC, datetime
-from typing import List, Optional, Tuple, Union
+from typing import List, Tuple, Union
 
 from atlassian import Jira  # type: ignore
 from genai import Client, Credentials
@@ -19,7 +19,7 @@ from genai.schema import (
 from langchain_core.language_models import LLM
 
 import text_wrapper
-from jiraissues import Issue, Myself, RelatedIssue, issue_cache
+from jiraissues import Issue, RelatedIssue, get_self, issue_cache
 
 _logger = logging.getLogger(__name__)
 
@@ -43,18 +43,6 @@ SUMMARY_ALLOWED_LABEL = "AISummary"
 _WRAP_COLUMN = 78
 
 _wrapper = text_wrapper.TextWrapper(SUMMARY_START_MARKER, SUMMARY_END_MARKER)
-
-_self: Optional[Myself] = None
-
-
-def self(client: Jira) -> Myself:
-    """
-    Caching function for the Myself object.
-    """
-    global _self  # pylint: disable=global-statement
-    if _self is None:
-        _self = Myself(client)
-    return _self
 
 
 # pylint: disable=too-many-locals
@@ -209,9 +197,9 @@ def summary_last_updated(issue: Issue) -> datetime:
         return last_update
 
     for change in issue.changelog:
-        if change.author == self(issue.client).display_name and "Status Summary" in [
-            chg.field for chg in change.changes
-        ]:
+        if change.author == get_self(
+            issue.client
+        ).display_name and "Status Summary" in [chg.field for chg in change.changes]:
             last_update = max(last_update, change.created)
 
     return last_update
@@ -338,7 +326,7 @@ def get_issues_to_summarize(
     """
     # The time format for the query needs to be in the local timezone of the
     # user, so we need to convert
-    user_zi = self(client).tzinfo
+    user_zi = get_self(client).tzinfo
     since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
     updated_issues = client.jql(
         f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated DESC",
