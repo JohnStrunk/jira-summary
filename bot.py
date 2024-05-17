@@ -77,9 +77,9 @@ def main():
                 print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
             since = start_time  # Only update if we succeeded
         except requests.exceptions.HTTPError as error:
-            logging.error("HTTPError exception: %s", error, stack_info=True)
+            logging.error("HTTPError exception: %s", error.response.reason)
         except requests.exceptions.ReadTimeout as error:
-            logging.error("ReadTimeout exception: %s", error, stack_info=True)
+            logging.error("ReadTimeout exception: %s", error, exc_info=True)
         logging.info(
             "Cache stats: %d hits, %d total", issue_cache.hits, issue_cache.tries
         )
