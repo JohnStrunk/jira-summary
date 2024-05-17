@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 
+import requests
 from atlassian import Jira  # type: ignore
 
 from jiraissues import Issue
@@ -51,10 +52,15 @@ def main():
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
     issue = Issue(jira, args.jira_issue_key)
-    out = summarize_issue(
-        issue, regenerate=regenerate, max_depth=max_depth, send_updates=send_updates
-    )
-    print(out)
+    try:
+        out = summarize_issue(
+            issue, regenerate=regenerate, max_depth=max_depth, send_updates=send_updates
+        )
+        print(out)
+    except requests.exceptions.HTTPError as error:
+        logging.error("HTTPError exception: %s", error.response.reason)
+    except requests.exceptions.ReadTimeout as error:
+        logging.error("ReadTimeout exception: %s", error, exc_info=True)
 
 
 if __name__ == "__main__":

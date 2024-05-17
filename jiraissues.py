@@ -18,7 +18,7 @@ CF_PARENT_LINK = "customfield_12313140"  # any
 CF_STATUS_SUMMARY = "customfield_12320841"  # string
 
 # How long to delay between API calls
-CALL_DELAY_SECONDS: float = 0.2
+MIN_CALL_DELAY: float = 0.2
 
 
 @dataclass
@@ -382,6 +382,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
 
+_last_call_time = datetime.now()
+
+
 def _check(response: Any) -> dict:
     """
     Check the response from the Jira API and raise an exception if it's an
@@ -392,7 +395,15 @@ def _check(response: Any) -> dict:
     general, when things go well, you get back a dict. Otherwise, you could get
     anything.
     """
-    sleep(CALL_DELAY_SECONDS)
+    # Here, we throttle the API calls to avoid hitting the rate limit of the Jira server
+    global _last_call_time  # pylint: disable=global-statement
+    now = datetime.now()
+    delta = now - _last_call_time
+    required_delay = MIN_CALL_DELAY - delta.total_seconds()
+    if required_delay > 0:
+        sleep(required_delay)
+    _last_call_time = now
+
     if isinstance(response, dict):
         return response
     raise ValueError(f"Unexpected response: {response}")
@@ -411,6 +422,19 @@ class Myself:  # pylint: disable=too-few-public-methods
         self.key: str = self._data["key"]
         self.timezone: str = self._data["timeZone"]
         self.tzinfo = ZoneInfo(self.timezone)
+
+
+_self: Optional[Myself] = None
+
+
+def get_self(client: Jira) -> Myself:
+    """
+    Caching function for the Myself object.
+    """
+    global _self  # pylint: disable=global-statement
+    if _self is None:
+        _self = Myself(client)
+    return _self
 
 
 class IssueCache:
