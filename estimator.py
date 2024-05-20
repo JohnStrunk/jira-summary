@@ -12,7 +12,8 @@ from datetime import datetime, timedelta
 import requests
 from atlassian import Jira  # type: ignore
 
-from jiraissues import Issue, get_self, issue_cache
+from jiraissues import Issue, check_response, get_self, issue_cache
+from summarizer import count_tokens, summarize_issue
 
 
 @dataclass
@@ -50,13 +51,27 @@ class IssueEstimate:
 
 def estimate_issue(issue: Issue) -> IssueEstimate:
     """Estimate the number of tokens needed to summarize the issue"""
+    prompt = summarize_issue(
+        issue,
+        max_depth=0,
+        send_updates=False,
+        regenerate=False,
+        return_prompt_only=True,
+    )
+    tokens = -1
+    try:
+        tokens = count_tokens(prompt)
+    except ValueError:
+        # If the prompt is too large, we can't count the tokens
+        pass
+
     return IssueEstimate(
         key=issue.key,
         issue_type=issue.issue_type,
         updated=issue.updated,
         child_count=len(issue.children),
         comment_count=len(issue.comments),
-        tokens=0,  # Placeholder for now
+        tokens=tokens,
     )
 
 
@@ -65,13 +80,13 @@ def get_modified_issues(client: Jira, since: datetime) -> list[Issue]:
     user_zi = get_self(client).tzinfo
     since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
 
-    issues = client.jql(
-        f"updated >= '{since_string}' ORDER BY updated DESC",
-        limit=1000,
-        fields="key",
+    issues = check_response(
+        client.jql(
+            f"updated >= '{since_string}' ORDER BY updated DESC",
+            limit=1000,
+            fields="key",
+        )
     )
-    if not isinstance(issues, dict):
-        return []
     issue_cache.clear()
     return [issue_cache.get_issue(client, issue["key"]) for issue in issues["issues"]]
 
