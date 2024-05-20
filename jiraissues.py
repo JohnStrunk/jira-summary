@@ -106,7 +106,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             "updated",
             CF_STATUS_SUMMARY,
         ]
-        data = _check(client.issue(issue_key, fields=",".join(fields)))
+        data = check_response(client.issue(issue_key, fields=",".join(fields)))
 
         # Populate the fields
         self.summary: str = data["fields"]["summary"]
@@ -136,7 +136,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
     def _fetch_changelog(self) -> List[ChangelogEntry]:
         """Fetch the changelog from the API."""
         _logger.debug("Retrieving changelog for %s", self.key)
-        log = _check(self.client.get_issue_changelog(self.key, start=0, limit=1000))
+        log = check_response(
+            self.client.get_issue_changelog(self.key, start=0, limit=1000)
+        )
         items: List[ChangelogEntry] = []
         for entry in log["histories"]:
             changes: List[Change] = []
@@ -169,9 +171,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
     def _fetch_comments(self) -> List[Comment]:
         """Fetch the comments from the API."""
         _logger.debug("Retrieving comments for %s", self.key)
-        comments = _check(self.client.issue(self.key, fields="comment"))["fields"][
-            "comment"
-        ]["comments"]
+        comments = check_response(self.client.issue(self.key, fields="comment"))[
+            "fields"
+        ]["comment"]["comments"]
         items: List[Comment] = []
         for comment in comments:
             items.append(
@@ -201,7 +203,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         ]
         found_issues: set[str] = set()
         _logger.debug("Retrieving related links for %s", self.key)
-        data = _check(self.client.issue(self.key, fields=",".join(fields)))
+        data = check_response(self.client.issue(self.key, fields=",".join(fields)))
         # Get the related issues
         related: List[RelatedIssue] = []
         for link in data["fields"]["issuelinks"]:
@@ -258,14 +260,16 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         # issue to it's children. epic_issues returns an error if the issue is not
         # an Epic. These are downward links to children
         if self.issue_type == "Epic":
-            issues_in_epic = _check(self.client.epic_issues(self.key, fields="key"))
+            issues_in_epic = check_response(
+                self.client.epic_issues(self.key, fields="key")
+            )
             for i in issues_in_epic["issues"]:
                 if i["key"] not in found_issues:
                     related.append(RelatedIssue(key=i["key"], how=_HOW_INEPIC))
                     found_issues.add(i["key"])
         else:
             # Non-epic issues use the parent link
-            issues_with_parent = _check(
+            issues_with_parent = check_response(
                 self.client.jql(f"'Parent Link' = '{self.key}'", limit=50, fields="key")
             )
             for i in issues_with_parent["issues"]:
@@ -362,7 +366,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
     @property
     def is_last_change_mine(self) -> bool:
         """Check if the last change in the changelog was made by me."""
-        me = _check(self.client.myself())
+        me = check_response(self.client.myself())
         return (
             self.last_change is not None
             and self.last_change.author == me["displayName"]
@@ -385,7 +389,18 @@ class Issue:  # pylint: disable=too-many-instance-attributes
 _last_call_time = datetime.now()
 
 
-def _check(response: Any) -> dict:
+def _rate_limit() -> None:
+    """Rate limit the API calls to avoid hitting the rate limit of the Jira server"""
+    global _last_call_time  # pylint: disable=global-statement
+    now = datetime.now()
+    delta = now - _last_call_time
+    required_delay = MIN_CALL_DELAY - delta.total_seconds()
+    if required_delay > 0:
+        sleep(required_delay)
+    _last_call_time = now
+
+
+def check_response(response: Any) -> dict:
     """
     Check the response from the Jira API and raise an exception if it's an
     error.
@@ -396,13 +411,7 @@ def _check(response: Any) -> dict:
     anything.
     """
     # Here, we throttle the API calls to avoid hitting the rate limit of the Jira server
-    global _last_call_time  # pylint: disable=global-statement
-    now = datetime.now()
-    delta = now - _last_call_time
-    required_delay = MIN_CALL_DELAY - delta.total_seconds()
-    if required_delay > 0:
-        sleep(required_delay)
-    _last_call_time = now
+    _rate_limit()
 
     if isinstance(response, dict):
         return response
@@ -416,7 +425,7 @@ class Myself:  # pylint: disable=too-few-public-methods
 
     def __init__(self, client: Jira) -> None:
         self.client = client
-        self._data = _check(client.myself())
+        self._data = check_response(client.myself())
         # Break out the fields we care about
         self.display_name: str = self._data["displayName"]
         self.key: str = self._data["key"]

@@ -46,11 +46,13 @@ _wrapper = text_wrapper.TextWrapper(SUMMARY_START_MARKER, SUMMARY_END_MARKER)
 
 
 # pylint: disable=too-many-locals
+# pylint: disable=too-many-branches
 def summarize_issue(
     issue: Issue,
     max_depth: int = 0,
     send_updates: bool = False,
     regenerate: bool = False,
+    return_prompt_only: bool = False,
 ) -> str:
     """
     Summarize a Jira issue.
@@ -65,6 +67,8 @@ def summarize_issue(
         - send_updates: If True, update the issue summaries on the server
         - regenerate: If True, regenerate the summary even if it is already
           up-to-date
+        - return_prompt_only: If True, return the prompt only and don't actually
+          summarize the issue
 
     Returns:
         A string containing the summary
@@ -162,6 +166,8 @@ You are a helpful assistant who is an expert in software development.
 {full_description}
 ```
 """
+    if return_prompt_only:
+        return llm_prompt
 
     _logger.info(
         "Summarizing %s (%d tokens) via LLM", issue.key, count_tokens(llm_prompt)
