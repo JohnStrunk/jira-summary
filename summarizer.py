@@ -19,7 +19,14 @@ from genai.schema import (
 from langchain_core.language_models import LLM
 
 import text_wrapper
-from jiraissues import Issue, RelatedIssue, descendants, get_self, issue_cache
+from jiraissues import (
+    Issue,
+    RelatedIssue,
+    check_response,
+    descendants,
+    get_self,
+    issue_cache,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -334,13 +341,13 @@ def get_issues_to_summarize(
     # user, so we need to convert
     user_zi = get_self(client).tzinfo
     since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
-    updated_issues = client.jql(
-        f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated DESC",
-        limit=50,
-        fields="key,updated",
+    updated_issues = check_response(
+        client.jql(
+            f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated DESC",  # pylint: disable=line-too-long
+            limit=50,
+            fields="key,updated",
+        )
     )
-    if not isinstance(updated_issues, dict):
-        return []
     keys: List[str] = [issue["key"] for issue in updated_issues["issues"]]
     # Filter out any issues that are not in the allowed projects
     filtered_keys = []
