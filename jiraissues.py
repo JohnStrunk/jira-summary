@@ -19,7 +19,7 @@ CF_PARENT_LINK = "customfield_12313140"  # any
 CF_STATUS_SUMMARY = "customfield_12320841"  # string
 
 # How long to delay between API calls
-MIN_CALL_DELAY: float = 0.2
+MIN_CALL_DELAY: float = 0.25
 
 
 @dataclass
