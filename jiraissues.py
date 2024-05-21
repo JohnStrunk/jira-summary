@@ -1,10 +1,11 @@
 """Helper functions for working with Jira issues."""
 
 import logging
+import queue
 from dataclasses import dataclass, field
 from datetime import datetime
 from time import sleep
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Set
 from zoneinfo import ZoneInfo
 
 from atlassian import Jira  # type: ignore
@@ -117,7 +118,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             data.get("fields", {}).get("parent", {}).get("key", None)
         )
         self.status: str = data["fields"]["status"]["name"]
-        self.labels: List[str] = data["fields"]["labels"]
+        self.labels: Set[str] = set(data["fields"]["labels"])
         self.resolution: str = (
             data["fields"]["resolution"]["name"]
             if data["fields"]["resolution"]
@@ -385,6 +386,19 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         self.status_summary = contents
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
+    def update_labels(self, new_labels: Set[str]) -> None:
+        """
+        UPDATE the Jira issue's labels ON THE SERVER.
+
+        Parameters:
+            - labels: The new set of labels for the issue.
+        """
+        _logger.info("Sending updated labels for %s to server", self.key)
+        fields = {"labels": list(new_labels)}
+        self.client.update_issue_field(self.key, fields)  # type: ignore
+        self.labels = new_labels
+        issue_cache.remove(self.key)  # Invalidate any cached copy
+
 
 _last_call_time = datetime.now()
 
@@ -451,10 +465,11 @@ class IssueCache:
     A cache of Jira issues to avoid fetching the same issue multiple times.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_size: int) -> None:
         self._cache: dict[str, Issue] = {}
         self.hits = 0
         self.tries = 0
+        self.max_size = max_size
 
     def get_issue(self, client: Jira, key: str) -> Issue:
         """
@@ -471,6 +486,9 @@ class IssueCache:
         self.tries += 1
         if key not in self._cache:
             _logger.debug("Cache miss: %s", key)
+            if len(self._cache) == self.max_size:
+                # Remove a random entry from the cache
+                del self._cache[next(iter(self._cache))]
             self._cache[key] = Issue(client, key)
         else:
             self.hits += 1
@@ -491,6 +509,42 @@ class IssueCache:
         """Clear the cache."""
         self._cache = {}
 
+    def __str__(self) -> str:
+        hr = self.hits * 100 / self.tries if self.tries > 0 else 0
+        return f"Hits: {self.hits} ({hr:.1f}%), Tries: {self.tries}, Size: {len(self._cache)}"
+
 
 # The global cache of issues
-issue_cache = IssueCache()
+issue_cache = IssueCache(10000)
+
+
+def descendants(client: Jira, issue_key: str) -> list[str]:
+    """
+    Get the descendants of an issue.
+
+    Parameters:
+        - client: The Jira client to use for fetching the issues.
+        - issue_key: The key of the issue to get the descendants of.
+
+    Returns:
+        A list of issue keys that are descendants of the given issue.
+    """
+    pending: queue.SimpleQueue[str] = queue.SimpleQueue()
+    pending.put(issue_key)
+
+    desc: list[str] = []
+
+    while not pending.empty():
+        key = pending.get()
+        result = check_response(
+            client.jql(
+                f"'Epic Link' = '{key}' or 'Parent Link' = '{key}'",
+                limit=200,
+                fields="key",
+            )
+        )
+        for issue in result["issues"]:
+            issue_key = issue["key"]
+            desc.append(issue_key)
+            pending.put(issue_key)
+    return desc

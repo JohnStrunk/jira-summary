@@ -80,9 +80,7 @@ def main():
             logging.error("HTTPError exception: %s", error.response.reason)
         except requests.exceptions.ReadTimeout as error:
             logging.error("ReadTimeout exception: %s", error, exc_info=True)
-        logging.info(
-            "Cache stats: %d hits, %d total", issue_cache.hits, issue_cache.tries
-        )
+        logging.info("Cache stats: %s", issue_cache)
         print(f"Iteration elapsed time: {datetime.now() - start_time}")
         print(f"Sleeping for {delay} seconds...")
         time.sleep(delay)
