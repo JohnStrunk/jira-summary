@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import requests
 from atlassian import Jira  # type: ignore
 
+import jiraissues
 from jiraissues import Issue, check_response, get_self, issue_cache
 from summarizer import count_tokens, summarize_issue
 
@@ -87,7 +88,8 @@ def get_modified_issues(client: Jira, since: datetime) -> list[Issue]:
             fields="key",
         )
     )
-    issue_cache.clear()
+    for issue in issues["issues"]:
+        issue_cache.remove(issue["key"])
     return [issue_cache.get_issue(client, issue["key"]) for issue in issues["issues"]]
 
 
@@ -102,36 +104,48 @@ def main() -> None:
         help="Set the logging level",
     )
     parser.add_argument(
+        "-o",
+        "--output",
+        type=argparse.FileType("a", encoding="utf-8"),
+        default="-",
+        help="Output file for estimates (CSV format), default: stdout",
+    )
+    parser.add_argument(
         "-s",
         "--seconds",
         type=int,
-        default=300,
+        default=30,
         help="Seconds to wait between iterations",
     )
 
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level))
     delay: int = args.seconds
+    outfile = args.output
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
-    print(IssueEstimate.csv_header())
+    jiraissues.MIN_CALL_DELAY = 0.25  # Override the default delay
+
+    print(IssueEstimate.csv_header(), file=outfile)
     since = datetime.now() + timedelta(seconds=-delay)
     while True:
         start_time = datetime.now()
         logging.info("Starting iteration at %s", start_time.isoformat())
+        processed = 0
         try:
             issues = get_modified_issues(jira, since)
+            print(f"Found {len(issues)} issues modified since {since}")
             for issue in issues:
-                print(estimate_issue(issue).as_csv())
+                print(estimate_issue(issue).as_csv(), file=outfile, flush=True)
+                processed += 1
             since = start_time  # Only update if we succeeded
         except requests.exceptions.HTTPError as error:
             logging.error("HTTPError exception: %s", error.response.reason)
         except requests.exceptions.ReadTimeout as error:
             logging.error("ReadTimeout exception: %s", error, exc_info=True)
-        logging.info(
-            "Cache stats: %d hits, %d total", issue_cache.hits, issue_cache.tries
-        )
+        print(issue_cache)
+        print(f"Issues processed: {processed}")
         print(f"Iteration elapsed time: {datetime.now() - start_time}")
         print(f"{'='*20} Sleeping for {delay} seconds {'='*20}")
         time.sleep(delay)

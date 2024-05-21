@@ -19,7 +19,7 @@ from genai.schema import (
 from langchain_core.language_models import LLM
 
 import text_wrapper
-from jiraissues import Issue, RelatedIssue, get_self, issue_cache
+from jiraissues import Issue, RelatedIssue, descendants, get_self, issue_cache
 
 _logger = logging.getLogger(__name__)
 
@@ -403,3 +403,48 @@ def count_tokens(text: Union[str, list[str]]) -> int:
         for result in resp.results:
             total_tokens += result.token_count
     return total_tokens
+
+
+def add_summary_label(issue: Issue) -> None:
+    """
+    Add the SUMMARY_ALLOWED_LABEL label to the issue.
+
+    Parameters:
+        - issue: The issue to add the label to
+    """
+    if SUMMARY_ALLOWED_LABEL in issue.labels:
+        return
+    labels = issue.labels.copy()
+    labels.add(SUMMARY_ALLOWED_LABEL)
+    _logger.debug("Adding %s label to %s", SUMMARY_ALLOWED_LABEL, issue.key)
+    issue.update_labels(labels)
+
+
+def remove_summary_label(issue: Issue) -> None:
+    """
+    Remove the SUMMARY_ALLOWED_LABEL label from the issue.
+
+    Parameters:
+        - issue: The issue to remove the label from
+    """
+    if SUMMARY_ALLOWED_LABEL not in issue.labels:
+        return
+    labels = issue.labels.copy()
+    labels.remove(SUMMARY_ALLOWED_LABEL)
+    _logger.debug("Removing %s label from %s", SUMMARY_ALLOWED_LABEL, issue.key)
+    issue.update_labels(labels)
+
+
+def add_summary_label_to_descendants(client: Jira, issue_key: str) -> None:
+    """
+    Add the SUMMARY_ALLOWED_LABEL label to the issue and its descendants.
+
+    Parameters:
+        - client: The Jira client to use
+        - issue_key: The key of the issue to add the label to
+    """
+    desc = descendants(client, issue_key)
+    desc.append(issue_key)
+    for key in desc:
+        issue = issue_cache.get_issue(client, key)
+        add_summary_label(issue)
