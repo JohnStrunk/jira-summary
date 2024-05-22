@@ -81,13 +81,13 @@ def summarize_issue(
         A string containing the summary
     """
 
-    _logger.info("Summarizing %s...", issue.key)
     # If the current summary is up-to-date and we're not asked to regenerate it,
     # return what's there
     if not regenerate and is_summary_current(issue):
-        _logger.debug("Summary for %s is current, using that.", issue.key)
+        _logger.info("Summarizing (using current): %s", issue)
         return _wrapper.get(issue.status_summary) or ""
 
+    _logger.info("Summarizing: %s", issue)
     # if we have not reached max-depth, summarize the child issues for inclusion in this summary
     child_summaries: List[Tuple[RelatedIssue, str]] = []
     for child in issue.children:
@@ -343,8 +343,8 @@ def get_issues_to_summarize(
     since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
     updated_issues = check_response(
         client.jql(
-            f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated DESC",  # pylint: disable=line-too-long
-            limit=50,
+            f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated ASC",  # pylint: disable=line-too-long
+            limit=100,
             fields="key,updated",
         )
     )
@@ -358,7 +358,9 @@ def get_issues_to_summarize(
             filtered_keys.append(key)
     keys = filtered_keys
 
-    _logger.info("Issues updated since %s: %s", since_string, ", ".join(keys))
+    _logger.info(
+        "Issues updated since %s: (%d) %s", since_string, len(keys), ", ".join(keys)
+    )
 
     # Given the updated issues, we also need to propagate the summaries up the
     # hierarchy. We first need to add the parent issues of all the updated

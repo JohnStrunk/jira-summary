@@ -6,7 +6,7 @@ import argparse
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 import requests
 from atlassian import Jira  # type: ignore
@@ -57,33 +57,63 @@ def main():
     logging.basicConfig(level=getattr(logging, args.log_level))
     max_depth = args.max_depth
     send_updates = not args.no_update
-    delay = args.seconds
-    since = datetime.fromisoformat(args.modified_since)
+    delay: int = args.seconds
+    since = datetime.fromisoformat(args.modified_since).astimezone(UTC)
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
+    most_recent_modification = since
     while True:
         start_time = datetime.now()
         logging.info("Starting iteration at %s", start_time.isoformat())
-        try:
-            issue_keys = get_issues_to_summarize(jira, since)
-            for issue_key in issue_keys:
-                issue_start_time = datetime.now()
-                issue = issue_cache.get_issue(jira, issue_key)
-                summary = summarize_issue(
-                    issue, max_depth=max_depth, send_updates=send_updates
+        issue_keys: list[str] = []
+        successful = False
+        while not successful:
+            try:
+                issue_keys = get_issues_to_summarize(jira, since)
+                successful = True
+            except requests.exceptions.HTTPError as error:
+                logging.error(
+                    "HTTPError exception (%s): %s",
+                    error.request.url,
+                    error.response.reason,
                 )
-                elapsed = datetime.now() - issue_start_time
-                print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
-            since = start_time  # Only update if we succeeded
-        except requests.exceptions.HTTPError as error:
-            logging.error("HTTPError exception: %s", error.response.reason)
-        except requests.exceptions.ReadTimeout as error:
-            logging.error("ReadTimeout exception: %s", error, exc_info=True)
+                time.sleep(5)
+            except requests.exceptions.ReadTimeout as error:
+                logging.error("ReadTimeout exception: %s", error, exc_info=True)
+                time.sleep(5)
+        for issue_key in issue_keys:
+            successful = False
+            while not successful:
+                try:
+                    issue_start_time = datetime.now()
+                    issue = issue_cache.get_issue(jira, issue_key)
+                    summary = summarize_issue(
+                        issue, max_depth=max_depth, send_updates=send_updates
+                    )
+                    elapsed = datetime.now() - issue_start_time
+                    print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
+                    if issue.updated > most_recent_modification:
+                        most_recent_modification = issue.updated
+                    successful = True
+                except requests.exceptions.HTTPError as error:
+                    logging.error(
+                        "HTTPError exception (%s): %s",
+                        error.request.url,
+                        error.response.reason,
+                    )
+                    time.sleep(5)
+                except requests.exceptions.ReadTimeout as error:
+                    logging.error("ReadTimeout exception: %s", error, exc_info=True)
+                    time.sleep(5)
+        since = most_recent_modification  # Only update if we succeeded
         logging.info("Cache stats: %s", issue_cache)
-        print(f"Iteration elapsed time: {datetime.now() - start_time}")
-        print(f"Sleeping for {delay} seconds...")
-        time.sleep(delay)
+        now = datetime.now()
+        elapsed = now - start_time
+        print(f"Iteration elapsed time: {elapsed}")
+        sleep_time = max(delay - elapsed.total_seconds(), 0)
+        print(f"Sleeping for {sleep_time} seconds...")
+        time.sleep(sleep_time)
 
 
 if __name__ == "__main__":
