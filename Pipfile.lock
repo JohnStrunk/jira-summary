@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "2240e2eac5e2dab81b1d49f7e74b4feb7d3ecd63398d1591ff5b9a56ecaffe71"
+            "sha256": "000d85600b58035a101bac661123b00461608ab2f44cb99933dcee8ad7f4da26"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -132,11 +132,11 @@
         },
         "atlassian-python-api": {
             "hashes": [
-                "sha256:b77b081da3242794060f553079d93a9b26bd0aa047d86abf1ae9e7bcf59fe4e8",
-                "sha256:f3887c5fe0149e90d22cd0fd8d99cd6a626e74ce80c190a40515d02c4a7a1a92"
+                "sha256:47ac76a171f08537cff64253d1b49a016dc6636dfbba324944c01397d755391c",
+                "sha256:e6503b2bfeedf100fcabc1d541718a8ab5e6fd757164438fcf4948e6ecea12e4"
             ],
             "index": "pypi",
-            "version": "==3.41.13"
+            "version": "==3.41.11"
         },
         "attrs": {
             "hashes": [
@@ -505,11 +505,11 @@
         },
         "langchain-core": {
             "hashes": [
-                "sha256:22c84e88aa7e98a0b98fadb3238343152641afce6ff27e8f2d9f5ff421e35a35",
-                "sha256:973cf3402d428018dc68313d8be0e721cea5b18d4ae82149ad659dbce34dc296"
+                "sha256:3521e1e573988c47399fca9739270c5d34f8ecec147253ad829eb9ff288f76d5",
+                "sha256:49383126168d934559a543ce812c485048d9e6ac9b6798fbf3d4a72b6bba5b0c"
             ],
             "markers": "python_version < '4.0' and python_full_version >= '3.8.1'",
-            "version": "==0.2.0"
+            "version": "==0.2.1"
         },
         "langchain-text-splitters": {
             "hashes": [
