@@ -3,7 +3,7 @@
 import logging
 import queue
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from time import sleep
 from typing import Any, List, Optional, Set
 from zoneinfo import ZoneInfo
@@ -106,6 +106,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             "resolution",
             "updated",
             CF_STATUS_SUMMARY,
+            "comment",
         ]
         data = check_response(client.issue(issue_key, fields=",".join(fields)))
 
@@ -124,15 +125,22 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             if data["fields"]["resolution"]
             else "Unresolved"
         )
+        # The "last updated" time is provided w/ TZ info
         self.updated: datetime = datetime.fromisoformat(data["fields"]["updated"])
         self.status_summary: str = data["fields"].get(CF_STATUS_SUMMARY) or ""
         self._changelog: Optional[List[ChangelogEntry]] = None
         self._comments: Optional[List[Comment]] = None
+        # Go ahead and parse the comments to avoid an extra API call
+        self._comments = self._parse_comment_data(data["fields"]["comment"]["comments"])
         self._related: Optional[List[RelatedIssue]] = None
-        _logger.info("Retrieved issue: %s - %s", self.key, self.summary)
+        _logger.info("Retrieved issue: %s", self)
 
     def __str__(self) -> str:
-        return f"{self.key}: {self.summary} ({self.status}/{self.resolution})"
+        updated = self.updated.strftime("%Y-%m-%d %H:%M:%S")
+        return (
+            f"{self.key} ({self.issue_type}) {updated} - "
+            + f"{self.summary} ({self.status}/{self.resolution})"
+        )
 
     def _fetch_changelog(self) -> List[ChangelogEntry]:
         """Fetch the changelog from the API."""
@@ -175,6 +183,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         comments = check_response(self.client.issue(self.key, fields="comment"))[
             "fields"
         ]["comment"]["comments"]
+        return self._parse_comment_data(comments)
+
+    def _parse_comment_data(self, comments: List[dict[str, Any]]) -> List[Comment]:
         items: List[Comment] = []
         for comment in comments:
             items.append(
@@ -400,13 +411,13 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
 
-_last_call_time = datetime.now()
+_last_call_time = datetime.now(UTC)
 
 
 def _rate_limit() -> None:
     """Rate limit the API calls to avoid hitting the rate limit of the Jira server"""
     global _last_call_time  # pylint: disable=global-statement
-    now = datetime.now()
+    now = datetime.now(UTC)
     delta = now - _last_call_time
     required_delay = MIN_CALL_DELAY - delta.total_seconds()
     if required_delay > 0:

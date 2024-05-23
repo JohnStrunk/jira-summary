@@ -81,13 +81,13 @@ def summarize_issue(
         A string containing the summary
     """
 
-    _logger.info("Summarizing %s...", issue.key)
     # If the current summary is up-to-date and we're not asked to regenerate it,
     # return what's there
     if not regenerate and is_summary_current(issue):
-        _logger.debug("Summary for %s is current, using that.", issue.key)
+        _logger.info("Summarizing (using current): %s", issue)
         return _wrapper.get(issue.status_summary) or ""
 
+    _logger.info("Summarizing: %s", issue)
     # if we have not reached max-depth, summarize the child issues for inclusion in this summary
     child_summaries: List[Tuple[RelatedIssue, str]] = []
     for child in issue.children:
@@ -322,8 +322,10 @@ def _chat_model(model_name: str = _MODEL_ID) -> LLM:
 
 
 def get_issues_to_summarize(
-    client: Jira, since: datetime = datetime.fromisoformat("2020-01-01")
-) -> List[str]:
+    client: Jira,
+    since: datetime = datetime.fromisoformat("2020-01-01"),
+    limit: int = 25,
+) -> tuple[List[str], datetime]:
     """
     Get a list of issues to summarize.
 
@@ -333,6 +335,7 @@ def get_issues_to_summarize(
     Parameters:
         - client: The Jira client to use
         - since: Only return issues updated after this time
+        - limit: The maximum number of issues to return
 
     Returns:
         A list of issue keys
@@ -343,22 +346,29 @@ def get_issues_to_summarize(
     since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
     updated_issues = check_response(
         client.jql(
-            f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated DESC",  # pylint: disable=line-too-long
-            limit=50,
+            f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated ASC",  # pylint: disable=line-too-long
+            limit=limit,
             fields="key,updated",
         )
     )
     keys: List[str] = [issue["key"] for issue in updated_issues["issues"]]
     # Filter out any issues that are not in the allowed projects
     filtered_keys = []
+    most_recent = since
     issue_cache.clear()  # Clear the cache to ensure we have the latest data
     for key in keys:
         issue = issue_cache.get_issue(client, key)
         if is_ok_to_post_summary(issue):
             filtered_keys.append(key)
+            most_recent = max(most_recent, issue.updated)
     keys = filtered_keys
 
-    _logger.info("Issues updated since %s: %s", since_string, ", ".join(keys))
+    _logger.info(
+        "Issues updated since %s: (%d) %s",
+        since.isoformat(),
+        len(keys),
+        ", ".join(keys),
+    )
 
     # Given the updated issues, we also need to propagate the summaries up the
     # hierarchy. We first need to add the parent issues of all the updated
@@ -378,7 +388,12 @@ def get_issues_to_summarize(
     # Sort the keys by level so that we summarize the children before the
     # parents, making the updated summaries available to the parents.
     keys = sorted(set(all_keys), key=lambda x: issue_cache.get_issue(client, x).level)
-    return keys
+    _logger.info(
+        "Total keys: %d, most recent modification: %s",
+        len(keys),
+        most_recent.isoformat(),
+    )
+    return (keys, most_recent)
 
 
 def count_tokens(text: Union[str, list[str]]) -> int:
