@@ -52,14 +52,13 @@ _WRAP_COLUMN = 78
 _wrapper = text_wrapper.TextWrapper(SUMMARY_START_MARKER, SUMMARY_END_MARKER)
 
 
-# pylint: disable=too-many-locals
-# pylint: disable=too-many-branches
-def summarize_issue(
+def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too-many-locals
     issue: Issue,
     max_depth: int = 0,
     send_updates: bool = False,
     regenerate: bool = False,
     return_prompt_only: bool = False,
+    current_depth: int = 0,
 ) -> str:
     """
     Summarize a Jira issue.
@@ -91,12 +90,21 @@ def summarize_issue(
     # if we have not reached max-depth, summarize the child issues for inclusion in this summary
     child_summaries: List[Tuple[RelatedIssue, str]] = []
     for child in issue.children:
-        if max_depth > 0:
+        if current_depth < max_depth:
             child_issue = issue_cache.get_issue(issue.client, child.key)
+            # If the child issue is allowed to have a summary, we restart our
+            # recursion since it should get the full benefit of the recursion.
+            new_depth = 0 if is_ok_to_post_summary(child_issue) else current_depth + 1
             child_summaries.append(
                 (
                     child,
-                    summarize_issue(child_issue, max_depth - 1, send_updates, False),
+                    summarize_issue(
+                        child_issue,
+                        max_depth=max_depth,
+                        send_updates=send_updates,
+                        regenerate=False,
+                        current_depth=new_depth,
+                    ),
                 )
             )
         else:
