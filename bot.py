@@ -15,7 +15,7 @@ from jiraissues import issue_cache
 from summarizer import get_issues_to_summarize, summarize_issue
 
 
-def main():
+def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
     """Main function for the bot."""
     # pylint: disable=duplicate-code
     parser = argparse.ArgumentParser(description="Summarizer bot")
@@ -31,6 +31,13 @@ def main():
         default="WARNING",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Set the logging level",
+    )
+    parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        default=150,
+        help="Maximum number of issues to summarize in each iteration",
     )
     parser.add_argument(
         "-m",
@@ -58,19 +65,22 @@ def main():
     max_depth = args.max_depth
     send_updates = not args.no_update
     delay: int = args.seconds
+    limit: int = args.limit
     since = datetime.fromisoformat(args.modified_since).astimezone(UTC)
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
     most_recent_modification = since
     while True:
-        start_time = datetime.now()
+        start_time = datetime.now(UTC)
         logging.info("Starting iteration at %s", start_time.isoformat())
         issue_keys: list[str] = []
         successful = False
         while not successful:
             try:
-                issue_keys = get_issues_to_summarize(jira, since)
+                (issue_keys, most_recent_modification) = get_issues_to_summarize(
+                    jira, since, limit
+                )
                 successful = True
             except requests.exceptions.HTTPError as error:
                 logging.error(
@@ -82,19 +92,24 @@ def main():
             except requests.exceptions.ReadTimeout as error:
                 logging.error("ReadTimeout exception: %s", error, exc_info=True)
                 time.sleep(5)
+
+        if len(issue_keys) < limit - 5:
+            # We retrieved all the modified issues, so we can advance farther
+            # and avoid re-fetching old issues
+            most_recent_modification = start_time
+        logging.info("Got updates through %s", most_recent_modification.isoformat())
+
         for issue_key in issue_keys:
             successful = False
             while not successful:
                 try:
-                    issue_start_time = datetime.now()
+                    issue_start_time = datetime.now(UTC)
                     issue = issue_cache.get_issue(jira, issue_key)
                     summary = summarize_issue(
                         issue, max_depth=max_depth, send_updates=send_updates
                     )
-                    elapsed = datetime.now() - issue_start_time
+                    elapsed = datetime.now(UTC) - issue_start_time
                     print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
-                    if issue.updated > most_recent_modification:
-                        most_recent_modification = issue.updated
                     successful = True
                 except requests.exceptions.HTTPError as error:
                     logging.error(
@@ -108,7 +123,7 @@ def main():
                     time.sleep(5)
         since = most_recent_modification  # Only update if we succeeded
         logging.info("Cache stats: %s", issue_cache)
-        now = datetime.now()
+        now = datetime.now(UTC)
         elapsed = now - start_time
         print(f"Iteration elapsed time: {elapsed}")
         sleep_time = max(delay - elapsed.total_seconds(), 0)
