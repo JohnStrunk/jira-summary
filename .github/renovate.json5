@@ -21,6 +21,11 @@
   "lockFileMaintenance": {
     "enabled": true
   },
+  "kubernetes": {
+    "fileMatch": [
+      "^jira-summarizer\\.yaml$"
+    ]
+  },
   "packageRules": [
     {
       "description": "Update renovatebot/pre-commit-hooks weekly to decrease noise",
