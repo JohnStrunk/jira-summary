@@ -476,8 +476,19 @@ class IssueCache:
     A cache of Jira issues to avoid fetching the same issue multiple times.
     """
 
+    @dataclass
+    class Entry:
+        """
+        An entry in the cache.
+        """
+
+        issue: Issue
+        insert_time: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+        last_used_time: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+        fetch_count: int = 0
+
     def __init__(self, max_size: int) -> None:
-        self._cache: dict[str, Issue] = {}
+        self._cache: dict[str, IssueCache.Entry] = {}
         self.hits = 0
         self.tries = 0
         self.max_size = max_size
@@ -498,13 +509,18 @@ class IssueCache:
         if key not in self._cache:
             _logger.debug("Cache miss: %s", key)
             if len(self._cache) == self.max_size:
-                # Remove a random entry from the cache
-                del self._cache[next(iter(self._cache))]
-            self._cache[key] = Issue(client, key)
+                # Remove the least recently used entry from the cache as
+                # determined by last_used_time
+                del self._cache[
+                    min(self._cache, key=lambda k: self._cache[k].last_used_time)
+                ]
+            self._cache[key] = IssueCache.Entry(Issue(client, key))
         else:
             self.hits += 1
             _logger.debug("Cache hit: %s", key)
-        return self._cache[key]
+            self._cache[key].fetch_count += 1
+            self._cache[key].last_used_time = datetime.now()
+        return self._cache[key].issue
 
     def remove(self, key: str) -> None:
         """
@@ -515,6 +531,18 @@ class IssueCache:
         """
         if key in self._cache:
             del self._cache[key]
+
+    def remove_older_than(self, when: datetime) -> None:
+        """
+        Remove all issues from the cache that were inserted before the given
+        time.
+
+        Parameters:
+            - when: The time before which to remove issues.
+        """
+        for key in list(self._cache.keys()):
+            if self._cache[key].insert_time < when:
+                del self._cache[key]
 
     def clear(self) -> None:
         """Clear the cache."""
