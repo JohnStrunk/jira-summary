@@ -6,7 +6,6 @@ import argparse
 import logging
 import os
 
-import requests
 from atlassian import Jira  # type: ignore
 
 from jiraissues import Issue
@@ -44,7 +43,11 @@ def main():
     parser.add_argument("jira_issue_key", type=str, help="JIRA issue key")
 
     args = parser.parse_args()
-    logging.basicConfig(level=getattr(logging, args.log_level))
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s %(levelname)s:%(name)s - %(message)s",
+        # datefmt="%Y-%m-%d %H:%M:%S.%f",
+    )
     max_depth = args.max_depth
     regenerate = args.regenerate
     send_updates = not args.no_update
@@ -52,15 +55,10 @@ def main():
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
     issue = Issue(jira, args.jira_issue_key)
-    try:
-        out = summarize_issue(
-            issue, regenerate=regenerate, max_depth=max_depth, send_updates=send_updates
-        )
-        print(out)
-    except requests.exceptions.HTTPError as error:
-        logging.error("HTTPError exception: %s", error.response.reason)
-    except requests.exceptions.ReadTimeout as error:
-        logging.error("ReadTimeout exception: %s", error, exc_info=True)
+    out = summarize_issue(
+        issue, regenerate=regenerate, max_depth=max_depth, send_updates=send_updates
+    )
+    print(out)
 
 
 if __name__ == "__main__":

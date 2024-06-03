@@ -26,6 +26,7 @@ from jiraissues import (
     descendants,
     get_self,
     issue_cache,
+    with_retry,
 )
 
 _logger = logging.getLogger(__name__)
@@ -353,10 +354,12 @@ def get_issues_to_summarize(
     user_zi = get_self(client).tzinfo
     since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
     updated_issues = check_response(
-        client.jql(
-            f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated ASC",  # pylint: disable=line-too-long
-            limit=limit,
-            fields="key,updated",
+        with_retry(
+            lambda: client.jql(
+                f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated ASC",  # pylint: disable=line-too-long
+                limit=limit,
+                fields="key,updated",
+            )
         )
     )
     keys: List[str] = [issue["key"] for issue in updated_issues["issues"]]
