@@ -9,11 +9,9 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-import requests
 from atlassian import Jira  # type: ignore
 
-import jiraissues
-from jiraissues import Issue, check_response, get_self, issue_cache
+from jiraissues import Issue, check_response, get_self, issue_cache, with_retry
 from summarizer import count_tokens, summarize_issue
 
 
@@ -82,15 +80,22 @@ def get_modified_issues(client: Jira, since: datetime) -> list[Issue]:
     since_string = since.astimezone(user_zi).strftime("%Y-%m-%d %H:%M")
 
     issues = check_response(
-        client.jql(
-            f"updated >= '{since_string}' ORDER BY updated DESC",
-            limit=1000,
-            fields="key",
+        with_retry(
+            lambda: client.jql(
+                f"updated >= '{since_string}' ORDER BY updated DESC",
+                limit=1000,
+                fields="key",
+            )
         )
     )
     for issue in issues["issues"]:
         issue_cache.remove(issue["key"])
-    return [issue_cache.get_issue(client, issue["key"]) for issue in issues["issues"]]
+
+    issue_list: list[Issue] = []
+    for idict in issues["issues"]:
+        issue = issue_cache.get_issue(client, idict["key"])
+        issue_list.append(issue)
+    return issue_list
 
 
 def main() -> None:
@@ -125,25 +130,18 @@ def main() -> None:
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
-    jiraissues.MIN_CALL_DELAY = 0.25  # Override the default delay
-
     print(IssueEstimate.csv_header(), file=outfile)
     since = datetime.now() + timedelta(seconds=-delay)
     while True:
         start_time = datetime.now()
         logging.info("Starting iteration at %s", start_time.isoformat())
         processed = 0
-        try:
-            issues = get_modified_issues(jira, since)
-            print(f"Found {len(issues)} issues modified since {since}")
-            for issue in issues:
-                print(estimate_issue(issue).as_csv(), file=outfile, flush=True)
-                processed += 1
-            since = start_time  # Only update if we succeeded
-        except requests.exceptions.HTTPError as error:
-            logging.error("HTTPError exception: %s", error.response.reason)
-        except requests.exceptions.ReadTimeout as error:
-            logging.error("ReadTimeout exception: %s", error, exc_info=True)
+        issues = get_modified_issues(jira, since)
+        print(f"Found {len(issues)} issues modified since {since}")
+        for issue in issues:
+            print(estimate_issue(issue).as_csv(), file=outfile, flush=True)
+            processed += 1
+        since = start_time
         print(issue_cache)
         print(f"Issues processed: {processed}")
         print(f"Iteration elapsed time: {datetime.now() - start_time}")

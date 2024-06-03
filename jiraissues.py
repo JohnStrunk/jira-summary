@@ -4,11 +4,12 @@ import logging
 import queue
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from time import sleep
 from typing import Any, List, Optional, Set
 from zoneinfo import ZoneInfo
 
+import requests
 from atlassian import Jira  # type: ignore
+from backoff_utils import backoff, strategies  # type: ignore
 
 _logger = logging.getLogger(__name__)
 
@@ -18,8 +19,32 @@ CF_FEATURE_LINK = "customfield_12318341"  # issuelinks
 CF_PARENT_LINK = "customfield_12313140"  # any
 CF_STATUS_SUMMARY = "customfield_12320841"  # string
 
-# How long to delay between API calls
-MIN_CALL_DELAY: float = 0.4
+# Exceptions that should trigger a backoff
+BACKOFF_EXCEPTIONS: list[type[Exception]] = [
+    requests.exceptions.ConnectionError,
+    requests.exceptions.HTTPError,
+    requests.exceptions.ReadTimeout,
+]
+# The Jira API seems to be limited to < 10 QPS
+BACKOFF_STRATEGY = strategies.Exponential(minimum=0.1, maximum=60, factor=2)
+
+
+def with_retry(func):
+    """
+    Wrapper to apply backoff to a function.
+
+    Parameters:
+        - func: The function to wrap.
+
+    Returns:
+        The result of the function.
+    """
+    return backoff(
+        func,
+        max_tries=100,
+        strategy=BACKOFF_STRATEGY,
+        catch_exceptions=BACKOFF_EXCEPTIONS,
+    )
 
 
 @dataclass
@@ -108,7 +133,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             CF_STATUS_SUMMARY,
             "comment",
         ]
-        data = check_response(client.issue(issue_key, fields=",".join(fields)))
+        data = check_response(
+            with_retry(lambda: client.issue(issue_key, fields=",".join(fields)))
+        )
 
         # Populate the fields
         self.summary: str = data["fields"]["summary"]
@@ -146,7 +173,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         """Fetch the changelog from the API."""
         _logger.debug("Retrieving changelog for %s", self.key)
         log = check_response(
-            self.client.get_issue_changelog(self.key, start=0, limit=1000)
+            with_retry(
+                lambda: self.client.get_issue_changelog(self.key, start=0, limit=1000)
+            )
         )
         items: List[ChangelogEntry] = []
         for entry in log["histories"]:
@@ -180,9 +209,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
     def _fetch_comments(self) -> List[Comment]:
         """Fetch the comments from the API."""
         _logger.debug("Retrieving comments for %s", self.key)
-        comments = check_response(self.client.issue(self.key, fields="comment"))[
-            "fields"
-        ]["comment"]["comments"]
+        comments = check_response(
+            with_retry(lambda: self.client.issue(self.key, fields="comment"))
+        )["fields"]["comment"]["comments"]
         return self._parse_comment_data(comments)
 
     def _parse_comment_data(self, comments: List[dict[str, Any]]) -> List[Comment]:
@@ -215,7 +244,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         ]
         found_issues: set[str] = set()
         _logger.debug("Retrieving related links for %s", self.key)
-        data = check_response(self.client.issue(self.key, fields=",".join(fields)))
+        data = check_response(
+            with_retry(lambda: self.client.issue(self.key, fields=",".join(fields)))
+        )
         # Get the related issues
         related: List[RelatedIssue] = []
         for link in data["fields"]["issuelinks"]:
@@ -273,7 +304,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         # an Epic. These are downward links to children
         if self.issue_type == "Epic":
             issues_in_epic = check_response(
-                self.client.epic_issues(self.key, fields="key")
+                with_retry(lambda: self.client.epic_issues(self.key, fields="key"))
             )
             for i in issues_in_epic["issues"]:
                 if i["key"] not in found_issues:
@@ -282,7 +313,11 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         else:
             # Non-epic issues use the parent link
             issues_with_parent = check_response(
-                self.client.jql(f"'Parent Link' = '{self.key}'", limit=50, fields="key")
+                with_retry(
+                    lambda: self.client.jql(
+                        f"'Parent Link' = '{self.key}'", limit=50, fields="key"
+                    )
+                )
             )
             for i in issues_with_parent["issues"]:
                 if i["key"] not in found_issues:
@@ -378,10 +413,10 @@ class Issue:  # pylint: disable=too-many-instance-attributes
     @property
     def is_last_change_mine(self) -> bool:
         """Check if the last change in the changelog was made by me."""
-        me = check_response(self.client.myself())
+        myself = get_self(self.client)
         return (
             self.last_change is not None
-            and self.last_change.author == me["displayName"]
+            and self.last_change.author == myself.display_name
         )
 
     def update_status_summary(self, contents: str) -> None:
@@ -393,7 +428,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         """
         _logger.info("Sending updated status summary for %s to server", self.key)
         fields = {CF_STATUS_SUMMARY: contents}
-        self.client.update_issue_field(self.key, fields)  # type: ignore
+        with_retry(lambda: self.client.update_issue_field(self.key, fields))  # type: ignore
         self.status_summary = contents
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
@@ -406,23 +441,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         """
         _logger.info("Sending updated labels for %s to server", self.key)
         fields = {"labels": list(new_labels)}
-        self.client.update_issue_field(self.key, fields)  # type: ignore
+        with_retry(lambda: self.client.update_issue_field(self.key, fields))  # type: ignore
         self.labels = new_labels
         issue_cache.remove(self.key)  # Invalidate any cached copy
-
-
-_last_call_time = datetime.now(UTC)
-
-
-def _rate_limit() -> None:
-    """Rate limit the API calls to avoid hitting the rate limit of the Jira server"""
-    global _last_call_time  # pylint: disable=global-statement
-    now = datetime.now(UTC)
-    delta = now - _last_call_time
-    required_delay = MIN_CALL_DELAY - delta.total_seconds()
-    if required_delay > 0:
-        sleep(required_delay)
-    _last_call_time = now
 
 
 def check_response(response: Any) -> dict:
@@ -435,9 +456,6 @@ def check_response(response: Any) -> dict:
     general, when things go well, you get back a dict. Otherwise, you could get
     anything.
     """
-    # Here, we throttle the API calls to avoid hitting the rate limit of the Jira server
-    _rate_limit()
-
     if isinstance(response, dict):
         return response
     raise ValueError(f"Unexpected response: {response}")
@@ -450,7 +468,7 @@ class Myself:  # pylint: disable=too-few-public-methods
 
     def __init__(self, client: Jira) -> None:
         self.client = client
-        self._data = check_response(client.myself())
+        self._data = check_response(with_retry(client.myself))
         # Break out the fields we care about
         self.display_name: str = self._data["displayName"]
         self.key: str = self._data["key"]
@@ -514,7 +532,8 @@ class IssueCache:
                 del self._cache[
                     min(self._cache, key=lambda k: self._cache[k].last_used_time)
                 ]
-            self._cache[key] = IssueCache.Entry(Issue(client, key))
+            issue = Issue(client, key)
+            self._cache[key] = IssueCache.Entry(issue)
         else:
             self.hits += 1
             _logger.debug("Cache hit: %s", key)
@@ -576,10 +595,12 @@ def descendants(client: Jira, issue_key: str) -> list[str]:
     while not pending.empty():
         key = pending.get()
         result = check_response(
-            client.jql(
-                f"'Epic Link' = '{key}' or 'Parent Link' = '{key}'",
-                limit=200,
-                fields="key",
+            with_retry(
+                lambda: client.jql(
+                    f"'Epic Link' = '{key}' or 'Parent Link' = '{key}'",
+                    limit=200,
+                    fields="key",
+                )
             )
         )
         for issue in result["issues"]:
