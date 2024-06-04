@@ -111,6 +111,16 @@ def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too
         else:
             child_summaries.append((child, ""))
 
+    # Handle the blockers
+    blocker_block = io.StringIO()
+    if issue.blocked:
+        if issue.blocked_reason:
+            blocker_block.write(
+                f"\nThis issue is blocked because:\n{issue.blocked_reason}\n"
+            )
+        else:
+            blocker_block.write("\nThis issue is blocked.\n")
+
     # The log of comments
     comment_block = io.StringIO()
     for comment in issue.comments:
@@ -158,6 +168,7 @@ def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too
     full_description = f"""\
 Title: {issue.key} - {issue.summary}
 Status/Resolution: {issue.status}/{issue.resolution}
+{blocker_block.getvalue()}
 
 === Description ===
 {issue.description}

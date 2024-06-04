@@ -14,6 +14,8 @@ from backoff_utils import backoff, strategies  # type: ignore
 _logger = logging.getLogger(__name__)
 
 # Custom field IDs
+CF_BLOCKED = "customfield_12316543"  # option
+CF_BLOCKED_REASON = "customfield_12316544"  # string
 CF_EPIC_LINK = "customfield_12311140"  # any
 CF_FEATURE_LINK = "customfield_12318341"  # issuelinks
 CF_PARENT_LINK = "customfield_12313140"  # any
@@ -131,6 +133,8 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             "resolution",
             "updated",
             CF_STATUS_SUMMARY,
+            CF_BLOCKED,
+            CF_BLOCKED_REASON,
             "comment",
         ]
         data = check_response(
@@ -160,6 +164,10 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         # Go ahead and parse the comments to avoid an extra API call
         self._comments = self._parse_comment_data(data["fields"]["comment"]["comments"])
         self._related: Optional[List[RelatedIssue]] = None
+        self.blocked = str(
+            data["fields"].get(CF_BLOCKED, {}).get("value", "False")
+        ).lower() in ["true"]
+        self.blocked_reason = str(data["fields"].get(CF_BLOCKED_REASON) or "")
         _logger.info("Retrieved issue: %s", self)
 
     def __str__(self) -> str:
