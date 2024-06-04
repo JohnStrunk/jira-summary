@@ -164,9 +164,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         # Go ahead and parse the comments to avoid an extra API call
         self._comments = self._parse_comment_data(data["fields"]["comment"]["comments"])
         self._related: Optional[List[RelatedIssue]] = None
-        self.blocked = str(
-            data["fields"].get(CF_BLOCKED, {}).get("value", "False")
-        ).lower() in ["true"]
+        # Some instances have None for the blocked flag instead of a value
+        blocked_dict = data["fields"].get(CF_BLOCKED) or {}
+        self.blocked = str(blocked_dict.get("value", "False")).lower() in ["true"]
         self.blocked_reason = str(data["fields"].get(CF_BLOCKED_REASON) or "")
         _logger.info("Retrieved issue: %s", self)
 
