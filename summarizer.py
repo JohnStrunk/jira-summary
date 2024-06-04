@@ -188,6 +188,7 @@ You are a helpful assistant who is an expert in software development.
 * Use only the information below to create your summary.
 * Include only the text of your summary in the response with no formatting.
 * Limit your summary to 100 words or less.
+* Today is {datetime.now().strftime("%A, %B %d, %Y")}.
 
 ```
 {full_description}
