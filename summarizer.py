@@ -219,9 +219,12 @@ def summary_last_updated(issue: Issue) -> datetime:
         return last_update
 
     for change in issue.changelog:
-        if change.author == get_self(
-            issue.client
-        ).display_name and "Status Summary" in [chg.field for chg in change.changes]:
+        # This is to prevent regenerating summaries due to the summary bot
+        # being moved to its own account instead of using mine
+        if change.author in [
+            get_self(issue.client).display_name,
+            "John Strunk",
+        ] and "Status Summary" in [chg.field for chg in change.changes]:
             last_update = max(last_update, change.created)
 
     return last_update
