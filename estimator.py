@@ -119,29 +119,36 @@ def main() -> None:
         "-s",
         "--seconds",
         type=int,
-        default=30,
+        default=1800,
         help="Seconds to wait between iterations",
+    )
+    parser.add_argument(
+        "-w",
+        "--window",
+        type=int,
+        default=300,
+        help="Window size in seconds to check for updated issues",
     )
 
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level))
     delay: int = args.seconds
     outfile = args.output
+    window = timedelta(seconds=args.window)
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
     print(IssueEstimate.csv_header(), file=outfile)
-    since = datetime.now() + timedelta(seconds=-delay)
     while True:
         start_time = datetime.now()
         logging.info("Starting iteration at %s", start_time.isoformat())
         processed = 0
+        since = datetime.now() - window
         issues = get_modified_issues(jira, since)
         print(f"Found {len(issues)} issues modified since {since}")
         for issue in issues:
             print(estimate_issue(issue).as_csv(), file=outfile, flush=True)
             processed += 1
-        since = start_time
         print(issue_cache)
         print(f"Issues processed: {processed}")
         print(f"Iteration elapsed time: {datetime.now() - start_time}")
