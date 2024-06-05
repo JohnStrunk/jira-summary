@@ -16,6 +16,7 @@ _logger = logging.getLogger(__name__)
 # Custom field IDs
 CF_BLOCKED = "customfield_12316543"  # option
 CF_BLOCKED_REASON = "customfield_12316544"  # string
+CF_CONTRIBUTORS = "customfield_12315950"  # list
 CF_EPIC_LINK = "customfield_12311140"  # any
 CF_FEATURE_LINK = "customfield_12318341"  # issuelinks
 CF_PARENT_LINK = "customfield_12313140"  # any
@@ -112,6 +113,20 @@ class RelatedIssue:
         return self.how in [_HOW_SUBTASK, _HOW_INEPIC, _HOW_INPARENT]
 
 
+class User:  # pylint: disable=too-few-public-methods
+    """A Jira user."""
+
+    def __init__(self, data: dict[str, Any]) -> None:
+        self.display_name = str(data.get("displayName", ""))
+        self.key = str(data.get("key", ""))
+        self.name = str(data.get("name", ""))
+        self.timezone = str(data.get("timeZone", ""))
+        self.tzinfo = ZoneInfo(self.timezone)
+
+    def __str__(self) -> str:
+        return f"{self.display_name} ({self.key})"
+
+
 class Issue:  # pylint: disable=too-many-instance-attributes
     """
     Represents a Jira issue as a proper object.
@@ -135,6 +150,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             CF_STATUS_SUMMARY,
             CF_BLOCKED,
             CF_BLOCKED_REASON,
+            CF_CONTRIBUTORS,
             "comment",
         ]
         data = check_response(
@@ -168,6 +184,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         blocked_dict = data["fields"].get(CF_BLOCKED) or {}
         self.blocked = str(blocked_dict.get("value", "False")).lower() in ["true"]
         self.blocked_reason = str(data["fields"].get(CF_BLOCKED_REASON) or "")
+        self.contributors = {
+            User(user) for user in data["fields"].get(CF_CONTRIBUTORS, [])
+        }
         _logger.info("Retrieved issue: %s", self)
 
     def __str__(self) -> str:
@@ -469,31 +488,17 @@ def check_response(response: Any) -> dict:
     raise ValueError(f"Unexpected response: {response}")
 
 
-class Myself:  # pylint: disable=too-few-public-methods
-    """
-    Represents the current user in Jira.
-    """
-
-    def __init__(self, client: Jira) -> None:
-        self.client = client
-        self._data = check_response(with_retry(client.myself))
-        # Break out the fields we care about
-        self.display_name: str = self._data["displayName"]
-        self.key: str = self._data["key"]
-        self.timezone: str = self._data["timeZone"]
-        self.tzinfo = ZoneInfo(self.timezone)
+_self: Optional[User] = None
 
 
-_self: Optional[Myself] = None
-
-
-def get_self(client: Jira) -> Myself:
+def get_self(client: Jira) -> User:
     """
     Caching function for the Myself object.
     """
     global _self  # pylint: disable=global-statement
     if _self is None:
-        _self = Myself(client)
+        data = check_response(with_retry(client.myself))
+        _self = User(data)
     return _self
 
 
