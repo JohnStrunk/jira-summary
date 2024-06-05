@@ -43,7 +43,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         "--modified-since",
         type=str,
         default="2024-01-01",
-        help="Summarize issues that have been modified since this date/time",
+        help="Summarize issues that have been modified since this date/time (YYYY-MM-DD)",
     )
     parser.add_argument(
         "-n",
