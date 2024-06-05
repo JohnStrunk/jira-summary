@@ -1,32 +1,49 @@
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jira-estimator-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: jira-summarizer
+  name: jira-estimator
   labels:
-    app: jira-summarizer
+    app: jira-estimator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: jira-summarizer
+      app: jira-estimator
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: jira-summarizer
+        app: jira-estimator
     spec:
       containers:
-        - name: summarizer
-          image: ghcr.io/johnstrunk/jira-summarizer:1.2.1@sha256:505b205a45f0eb24d82fa5c02dc105af6d075362cb2694d82dc5face1d0a54ed
+        - name: estimator
+          image: ghcr.io/johnstrunk/jira-summarizer:1.2.1
+          command:
+            - "/app/.venv/bin/python"
+            - "estimator.py"
           args:
             - "--log-level"
             - "INFO"
             - "--seconds"
-            - "120"
-            - "--modified-since"
-            - "2024-06-03"
+            - "1800"
+            - "--window"
+            - "300"
+            - "--output"
+            - "/data/estimates.csv"
           envFrom:
             - secretRef:
                 name: jira-summarizer-secret
@@ -44,6 +61,13 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: data
+              mountPath: "/data"
       securityContext:
         runAsNonRoot: true
       terminationGracePeriodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: jira-estimator-pvc
