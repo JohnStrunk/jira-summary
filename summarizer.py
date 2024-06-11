@@ -22,6 +22,7 @@ import text_wrapper
 from jiraissues import (
     Issue,
     RelatedIssue,
+    User,
     check_response,
     descendants,
     get_self,
@@ -202,7 +203,7 @@ You are a helpful assistant who is an expert in software development.
     )
     _logger.debug("Prompt:\n%s", llm_prompt)
 
-    chat = _chat_model()
+    chat = get_chat_model()
     summary = chat.invoke(llm_prompt, stop=["<|endoftext|>"]).strip()
     folded_summary = textwrap.fill(summary, width=_WRAP_COLUMN)
     if send_updates and is_ok_to_post_summary(issue):
@@ -313,7 +314,7 @@ def _genai_client() -> Client:
     return client
 
 
-def _chat_model(model_name: str = _MODEL_ID) -> LLM:
+def get_chat_model(model_name: str = _MODEL_ID, max_new_tokens=4000) -> LLM:
     """
     Return a chat model to use for summarization.
 
@@ -329,7 +330,7 @@ def _chat_model(model_name: str = _MODEL_ID) -> LLM:
         client=client,
         parameters=TextGenerationParameters(
             decoding_method=DecodingMethod.SAMPLE,
-            max_new_tokens=4000,
+            max_new_tokens=max_new_tokens,
             min_new_tokens=10,
             temperature=0.5,
             top_k=50,
@@ -496,3 +497,25 @@ def add_summary_label_to_descendants(client: Jira, issue_key: str) -> None:
     for key in desc:
         issue = issue_cache.get_issue(client, key)
         add_summary_label(issue)
+
+
+def rollup_contributors(issue: Issue, include_assignee=True) -> set[User]:
+    """
+    Roll up the set of contributors from the issue and its children.
+
+    Parameters:
+        - issue: The issue to roll up the contributors from
+        - include_assignee: Include the issue assignee in the set of
+          contributors
+
+    Returns:
+        The set of contributors
+    """
+    contributors = set()
+    for child in issue.children:
+        child_issue = issue_cache.get_issue(issue.client, child.key)
+        contributors.update(rollup_contributors(child_issue))
+    contributors.update(issue.contributors)
+    if include_assignee and issue.assignee is not None:
+        contributors.add(issue.assignee)
+    return contributors

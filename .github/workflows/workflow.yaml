@@ -44,10 +44,10 @@ jobs:
             pre-commit|
 
       - name: Run pre-commit checks
-        run: pipx run pre-commit run -a
+        run: pipx run --python ${{ steps.setup-py.outputs.python-version}} pre-commit run -a
 
       - name: Run pre-commit gc
-        run: pipx run pre-commit gc
+        run: pipx run --python ${{ steps.setup-py.outputs.python-version}} pre-commit gc
 
   tests:
     name: "Tests"
@@ -67,7 +67,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install pipenv
-        run: pipx install pipenv
+        run: pipx install --python ${{ steps.setup-py.outputs.python-version}} pipenv
 
       - name: Install dependencies
         run: pipenv install --dev
