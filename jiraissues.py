@@ -126,6 +126,19 @@ class User:  # pylint: disable=too-few-public-methods
     def __str__(self) -> str:
         return f"{self.display_name} ({self.key})"
 
+    def __hash__(self) -> int:
+        return hash((self.key, self.name, self.display_name, self.timezone))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, User):
+            return False
+        return (
+            self.key == other.key
+            and self.name == other.name
+            and self.display_name == other.display_name
+            and self.timezone == other.timezone
+        )
+
 
 class Issue:  # pylint: disable=too-many-instance-attributes
     """
@@ -152,7 +165,18 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             CF_BLOCKED_REASON,
             CF_CONTRIBUTORS,
             "comment",
+            "assignee",
         ]
+        # Need to Handle 403 errors
+        # DEBUG:urllib3.connectionpool:https://server.com:443 "GET
+        # /rest/api/2/issue/XXXX-16688?fields=summary,...,comment HTTP/1.1" 403
+        # None
+        # DEBUG:atlassian.rest_client:HTTP: GET
+        # rest/api/2/issue/XXXX-16688?fields=summary,...,comment -> 403
+        # Forbidden
+        # DEBUG:atlassian.rest_client:HTTP: Response text ->
+        # {"errorMessages":["You do not have the permission to see the specified
+        # issue."],"errors":{}}
         data = check_response(
             with_retry(lambda: client.issue(issue_key, fields=",".join(fields)))
         )
@@ -185,14 +209,16 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         self.blocked = str(blocked_dict.get("value", "False")).lower() in ["true"]
         self.blocked_reason = str(data["fields"].get(CF_BLOCKED_REASON) or "")
         self.contributors = {
-            User(user) for user in data["fields"].get(CF_CONTRIBUTORS, [])
+            User(user) for user in (data["fields"].get(CF_CONTRIBUTORS) or [])
         }
+        self.assignee = (
+            User(data["fields"]["assignee"]) if data["fields"]["assignee"] else None
+        )
         _logger.info("Retrieved issue: %s", self)
 
     def __str__(self) -> str:
-        updated = self.updated.strftime("%Y-%m-%d %H:%M:%S")
         return (
-            f"{self.key} ({self.issue_type}) {updated} - "
+            f"{self.key} ({self.issue_type}) - "
             + f"{self.summary} ({self.status}/{self.resolution})"
         )
 
