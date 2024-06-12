@@ -92,10 +92,19 @@ Please provide just the summary paragraph, with no header.
 """
     exec_paragraph = textwrap.fill(llm.invoke(prompt, stop=["<|endoftext|>"]).strip())
 
+    # Determine contributors to the whole top-level issue, sorted by last name
+    all_contributors = sorted(
+        rollup_contributors(epic), key=lambda x: x.display_name.split()[-1]
+    )
+
     # Generate the overall status update
     print(f"# Executive Summary for [{issue_key}]({LINK_BASE}{issue_key})")
     print()
     print(exec_paragraph)
+    print()
+    print(f"**Resource count:** {len(all_contributors)}")
+    print()
+    print(f"**Contributors:** {', '.join(c.display_name for c in all_contributors)}")
     print()
     print("## Individual issue status")
     print()
