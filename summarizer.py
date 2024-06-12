@@ -5,9 +5,11 @@ import logging
 import os
 import textwrap
 from datetime import UTC, datetime
-from typing import List, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
+import genai.exceptions
 from atlassian import Jira  # type: ignore
+from backoff_utils import backoff, strategies  # type: ignore
 from genai import Client, Credentials
 from genai.extensions.langchain import LangChainInterface
 from genai.schema import (
@@ -16,7 +18,8 @@ from genai.schema import (
     TextTokenizationParameters,
     TextTokenizationReturnOptions,
 )
-from langchain_core.language_models import LLM
+from langchain_core.language_models import LLM, LanguageModelInput
+from langchain_core.runnables import RunnableConfig
 
 import text_wrapper
 from jiraissues import (
@@ -314,6 +317,30 @@ def _genai_client() -> Client:
     return client
 
 
+class RetryingLCI(LangChainInterface):
+    """A LangChainInterface that retries on failure."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    # pylint: disable=redefined-builtin
+    def invoke(
+        self,
+        input: LanguageModelInput,
+        config: Optional[RunnableConfig] = None,
+        *,
+        stop: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> str:
+        fn = super().invoke
+        return backoff(
+            lambda: fn(input, config=config, stop=stop, **kwargs),
+            max_tries=100,
+            strategy=strategies.Exponential(minimum=1.0, maximum=60.0, factor=2),
+            catch_exceptions=genai.exceptions.ApiResponseException,
+        )
+
+
 def get_chat_model(model_name: str = _MODEL_ID, max_new_tokens=4000) -> LLM:
     """
     Return a chat model to use for summarization.
@@ -325,7 +352,7 @@ def get_chat_model(model_name: str = _MODEL_ID, max_new_tokens=4000) -> LLM:
     # https://ibm.github.io/ibm-generative-ai/v2.3.0/rst_source/examples.extensions.langchain.langchain_chat_stream.html
     client = _genai_client()
 
-    return LangChainInterface(
+    return RetryingLCI(
         model_id=model_name,
         client=client,
         parameters=TextGenerationParameters(
