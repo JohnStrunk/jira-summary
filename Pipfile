@@ -8,6 +8,8 @@ atlassian-python-api = "3.41.11"
 langchain = "*"
 ibm-generative-ai = "*"
 backoff-utils = "*"
+flask = "*"
+flask-jwt-extended = "*"
 
 [dev-packages]
 ipykernel = "*"
