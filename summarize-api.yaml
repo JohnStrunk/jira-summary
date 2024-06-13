@@ -1,0 +1,83 @@
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: summarize-api
+  labels:
+    app: summarize-api
+spec:
+  host: jira-summarizer.apps.platform-sts.pcbk.p1.openshiftapps.com
+  to:
+    kind: Service
+    name: summarize-api
+    weight: 100
+  port:
+    targetPort: 8000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: summarize-api
+spec:
+  selector:
+    app: summarize-api
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: summarize-api
+  labels:
+    app: summarize-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: summarize-api
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: summarize-api
+    spec:
+      containers:
+        - name: estimator
+          image: ghcr.io/johnstrunk/jira-summarizer:1.2.1@sha256:505b205a45f0eb24d82fa5c02dc105af6d075362cb2694d82dc5face1d0a54ed
+          command:
+            - "/app/.venv/bin/gunicorn"
+          args:
+            - "--bind=0.0.0.0:8000"
+            - "--access-logfile=-"
+            - "summarize_api:create_app()"
+          envFrom:
+            - secretRef:
+                name: jira-summarizer-secret
+                optional: false
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "10m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      securityContext:
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 10
