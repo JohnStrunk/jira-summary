@@ -47,9 +47,11 @@ def create_app():
         issue_cache.remove_older_than(when)
 
         issue = issue_cache.get_issue(client, key)
+        summary = summarizer.summarize_issue(issue, max_depth=1)
         return {
             "key": key,
-            "summary": summarizer.summarize_issue(issue, max_depth=1),
+            # Convert the summary into a single line, removing newlines and extra spaces
+            "summary": " ".join(summary.split()),
             "user": get_jwt_identity(),
         }
 
