@@ -51,7 +51,7 @@ spec:
         app: summarize-api
     spec:
       containers:
-        - name: estimator
+        - name: summarize-api
           image: ghcr.io/johnstrunk/jira-summarizer:1.2.1@sha256:505b205a45f0eb24d82fa5c02dc105af6d075362cb2694d82dc5face1d0a54ed
           command:
             - "/app/.venv/bin/gunicorn"
@@ -78,6 +78,12 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
       securityContext:
         runAsNonRoot: true
       terminationGracePeriodSeconds: 10
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
