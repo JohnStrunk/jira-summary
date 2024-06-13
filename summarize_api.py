@@ -45,6 +45,7 @@ def create_app():
 
         when = datetime.datetime.now(UTC) - datetime.timedelta(hours=1)
         issue_cache.remove_older_than(when)
+        issue_cache.remove(key)
 
         issue = issue_cache.get_issue(client, key)
         summary = summarizer.summarize_issue(issue, max_depth=1)
