@@ -10,6 +10,7 @@ ibm-generative-ai = "*"
 backoff-utils = "*"
 flask = "*"
 flask-jwt-extended = "*"
+gunicorn = "*"
 
 [dev-packages]
 ipykernel = "*"

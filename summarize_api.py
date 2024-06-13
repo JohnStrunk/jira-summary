@@ -2,8 +2,10 @@
 
 """Summarize a JIRA issue"""
 
+import datetime
 import os
 import sys
+from datetime import UTC
 from sys import argv
 
 from atlassian import Jira  # type: ignore
@@ -40,6 +42,9 @@ def create_app():
         key = request.args.get("key")
         if key is None:
             return {"error": 'Missing required parameter "key"'}, 400
+
+        when = datetime.datetime.now(UTC) - datetime.timedelta(hours=1)
+        issue_cache.remove_older_than(when)
 
         issue = issue_cache.get_issue(client, key)
         return {

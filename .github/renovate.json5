@@ -24,7 +24,8 @@
   "kubernetes": {
     "fileMatch": [
       "^jira-summarizer\\.yaml$",
-      "^jira-estimator\\.yaml$"
+      "^jira-estimator\\.yaml$",
+      "^summarize-api\\.yaml$"
     ]
   },
   "packageRules": [
