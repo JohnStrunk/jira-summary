@@ -96,9 +96,13 @@ Please provide just the summary paragraph, with no header.
 """
     exec_paragraph = textwrap.fill(llm.invoke(prompt, stop=["<|endoftext|>"]).strip())
 
-    # Determine contributors to the whole top-level issue, sorted by last name
-    all_contributors = sorted(
-        rollup_contributors(epic), key=lambda x: x.display_name.split()[-1]
+    # Determine contributors to the whole top-level issue, sorted by last name.
+    # The rollup function returns a set, ensuring uniqueness of User, but here
+    # we convert to the display name, ensuring uniqueness of display name,
+    # handling the case of multiple users with the same display name
+    all_contributor_names = {c.display_name for c in rollup_contributors(epic)}
+    all_contributor_names_sorted = sorted(
+        all_contributor_names, key=lambda x: x.split()[-1]
     )
 
     # Generate the overall status update
@@ -106,9 +110,9 @@ Please provide just the summary paragraph, with no header.
     print()
     print(exec_paragraph)
     print()
-    print(f"**Resource count:** {len(all_contributors)}")
+    print(f"**Resource count:** {len(all_contributor_names_sorted)}")
     print()
-    print(f"**Contributors:** {', '.join(c.display_name for c in all_contributors)}")
+    print(f"**Contributors:** {', '.join(all_contributor_names_sorted)}")
     print()
     print("## Individual issue status")
     print()
@@ -118,13 +122,10 @@ Please provide just the summary paragraph, with no header.
         print()
         print(item.exec_summary)
         print()
-        contributors = sorted(
-            item.contributors, key=lambda x: x.display_name.split()[-1]
-        )
-        if contributors:
-            print(
-                f"**Contributors:** {', '.join([c.display_name for c in contributors])}"
-            )
+        contrib_names = {c.display_name for c in item.contributors}
+        contrib_names_sorted = sorted(contrib_names, key=lambda x: x.split()[-1])
+        if contrib_names_sorted:
+            print(f"**Contributors:** {', '.join(contrib_names_sorted)}")
             print()
 
 
