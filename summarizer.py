@@ -32,6 +32,7 @@ from jiraissues import (
     issue_cache,
     with_retry,
 )
+from simplestats import measure_function
 
 _logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ _WRAP_COLUMN = 78
 _wrapper = text_wrapper.TextWrapper(SUMMARY_START_MARKER, SUMMARY_END_MARKER)
 
 
+@measure_function
 def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too-many-locals
     issue: Issue,
     max_depth: int = 0,
@@ -201,9 +203,7 @@ You are a helpful assistant who is an expert in software development.
     if return_prompt_only:
         return llm_prompt
 
-    _logger.info(
-        "Summarizing %s (%d tokens) via LLM", issue.key, count_tokens(llm_prompt)
-    )
+    _logger.info("Summarizing %s via LLM", issue.key)
     _logger.debug("Prompt:\n%s", llm_prompt)
 
     chat = get_chat_model()
@@ -324,6 +324,7 @@ class RetryingLCI(LangChainInterface):
         super().__init__(*args, **kwargs)
 
     # pylint: disable=redefined-builtin
+    @measure_function
     def invoke(
         self,
         input: LanguageModelInput,
@@ -450,6 +451,7 @@ def get_issues_to_summarize(
     return (keys, most_recent)
 
 
+@measure_function
 def count_tokens(text: Union[str, list[str]]) -> int:
     """
     Count the number of tokens in a string.
@@ -526,6 +528,7 @@ def add_summary_label_to_descendants(client: Jira, issue_key: str) -> None:
         add_summary_label(issue)
 
 
+@measure_function
 def rollup_contributors(issue: Issue, include_assignee=True) -> set[User]:
     """
     Roll up the set of contributors from the issue and its children.

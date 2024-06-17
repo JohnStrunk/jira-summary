@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from atlassian import Jira  # type: ignore
 
 from jiraissues import Issue, User, issue_cache
+from simplestats import Timer
 from summarizer import get_chat_model, rollup_contributors, summarize_issue
 
 LINK_BASE = "https://issues.redhat.com/browse/"
@@ -26,7 +27,7 @@ class IssueSummary:
     contributors: set[User] = field(default_factory=set)
 
 
-def main() -> None:  # pylint: disable=too-many-locals
+def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
     """Main function"""
     # pylint: disable=duplicate-code
     parser = argparse.ArgumentParser(description="Generate an issue summary roll-up")
@@ -45,6 +46,8 @@ def main() -> None:  # pylint: disable=too-many-locals
     client = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
     # Get the existing summaries from the Jira issues
+    stime = Timer("Collect")
+    stime.start()
     logging.info("Collecting issue summaries for children of %s", issue_key)
     child_inputs: list[IssueSummary] = []
     epic = issue_cache.get_issue(client, issue_key)
@@ -57,6 +60,7 @@ def main() -> None:  # pylint: disable=too-many-locals
                 issue=issue, summary=text, contributors=rollup_contributors(issue)
             )
         )
+    stime.stop()
 
     # Sort the issues by key
     child_inputs.sort(key=lambda x: x.issue.key)
@@ -125,4 +129,5 @@ Please provide just the summary paragraph, with no header.
 
 
 if __name__ == "__main__":
-    main()
+    with Timer("Total execution"):
+        main()

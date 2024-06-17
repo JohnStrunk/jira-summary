@@ -11,6 +11,8 @@ import requests
 from atlassian import Jira  # type: ignore
 from backoff_utils import backoff, strategies  # type: ignore
 
+from simplestats import measure_function
+
 _logger = logging.getLogger(__name__)
 
 # Custom field IDs
@@ -145,6 +147,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
     Represents a Jira issue as a proper object.
     """
 
+    @measure_function
     def __init__(self, client: Jira, issue_key: str) -> None:
         self.client = client
         self.key = issue_key
@@ -222,6 +225,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             + f"{self.summary} ({self.status}/{self.resolution})"
         )
 
+    @measure_function
     def _fetch_changelog(self) -> List[ChangelogEntry]:
         """Fetch the changelog from the API."""
         _logger.debug("Retrieving changelog for %s", self.key)
@@ -259,6 +263,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             self._changelog = self._fetch_changelog()
         return self._changelog
 
+    @measure_function
     def _fetch_comments(self) -> List[Comment]:
         """Fetch the comments from the API."""
         _logger.debug("Retrieving comments for %s", self.key)
@@ -286,6 +291,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             self._comments = self._fetch_comments()
         return self._comments
 
+    @measure_function
     def _fetch_related(self) -> List[RelatedIssue]:  # pylint: disable=too-many-branches
         """Fetch the related issues from the API."""
         fields = [
@@ -402,6 +408,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         return None
 
     @property
+    @measure_function
     def all_parents(self) -> List[str]:
         """All the parent issues of this issue."""
         parents = []
@@ -472,6 +479,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             and self.last_change.author == myself.display_name
         )
 
+    @measure_function
     def update_status_summary(self, contents: str) -> None:
         """
         UPDATE the Jira issue's description ON THE SERVER.
@@ -550,6 +558,7 @@ class IssueCache:
         self.tries = 0
         self.max_size = max_size
 
+    @measure_function
     def get_issue(self, client: Jira, key: str) -> Issue:
         """
         Get an issue from the cache, or fetch it from the server if it's not
@@ -615,6 +624,7 @@ class IssueCache:
 issue_cache = IssueCache(10000)
 
 
+@measure_function
 def descendants(client: Jira, issue_key: str) -> list[str]:
     """
     Get the descendants of an issue.
