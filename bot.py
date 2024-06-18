@@ -7,10 +7,12 @@ import logging
 import os
 import time
 from datetime import UTC, datetime
+from sys import stdout
 
 from atlassian import Jira  # type: ignore
 
 from jiraissues import issue_cache
+from simplestats import Timer
 from summarizer import get_issues_to_summarize, summarize_issue
 
 
@@ -94,6 +96,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
         since = most_recent_modification
         logging.info("Cache stats: %s", issue_cache)
+        Timer.dump(stdout)
         now = datetime.now(UTC)
         elapsed = now - start_time
         print(f"Iteration elapsed time: {elapsed}")

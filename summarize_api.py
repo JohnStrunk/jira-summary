@@ -20,6 +20,7 @@ from flask_jwt_extended import (
 
 import summarizer
 from jiraissues import issue_cache
+from simplestats import Timer
 
 
 def create_app():
@@ -39,6 +40,8 @@ def create_app():
     @app.route("/api/v1/summarize-issue", methods=["GET"])
     @jwt_required()
     def summarize_issue():
+        Timer.clear()
+        req = Timer("Request", autostart=True)
         key = request.args.get("key")
         if key is None:
             return {"error": 'Missing required parameter "key"'}, 400
@@ -49,11 +52,21 @@ def create_app():
 
         issue = issue_cache.get_issue(client, key)
         summary = summarizer.summarize_issue(issue, max_depth=1)
+        req.stop()
+        getissue_stats = Timer.stats("IssueCache.get_issue")
+        fetchrelated_stats = Timer.stats("Issue._fetch_related")
+        llm_stats = Timer.stats("RetryingLCI.invoke")
         return {
             "key": key,
             # Convert the summary into a single line, removing newlines and extra spaces
             "summary": " ".join(summary.split()),
             "user": get_jwt_identity(),
+            "stats": {
+                "fetchrelated_time": fetchrelated_stats.elapsed_ns / 1000000000,
+                "getissue_time": getissue_stats.elapsed_ns / 1000000000,
+                "llm_time": llm_stats.elapsed_ns / 1000000000,
+                "request_time": req.elapsed_ns / 1000000000,
+            },
         }
 
     return app
