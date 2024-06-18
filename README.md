@@ -12,16 +12,17 @@ will ignore the `.env` file.*
 The following variables are required:
 
 - `ALLOWED_PROJECTS`: A comma-separated list of Jira project keys that the bot
-  is allowed to summarize (e.g., `ALLOWED_PROJECTS=OCTO,OCTOET`)
+  is allowed to summarize (e.g., `ALLOWED_PROJECTS=OCTO,OCTOET`) (for the bot)
 - `GENAI_API`: The API endpoint for the IBM AI model (e.g., `https://...`)
 - `GENAI_KEY`: Your API key for the IBM AI model
 - `JIRA_TOKEN`: A JIRA PAT token that will allow retrieving issues from Jira as
   well as posting the AI summaries
 - `JIRA_URL`: The URL for the Jira instance (e.g., `https://...`)
+- `JWT_SECRET_KEY`: The secret key for the JWT token (for the API)
 
 ## Commands
 
-Summarize a single Jira issue: `summarize_issue.py`:
+### Summarize a single Jira issue: `summarize_issue.py`
 
 ```console
 $ pipenv run ./summarize_issue.py --help
@@ -44,7 +45,7 @@ options:
   -r, --regenerate      Force regeneration of summaries
 ```
 
-Summarizer bot: `bot.py`:
+### Summarizer bot: `bot.py`
 
 ```console
 $ pipenv run ./bot.py --help
@@ -67,7 +68,7 @@ options:
                         Seconds to wait between iterations
 ```
 
-## Methods to run the summarizer bot
+#### Methods to run the summarizer bot
 
 Note: All these methods assume that the required environment variables are
 configured via a `.env` file, as described above.
@@ -87,6 +88,54 @@ configured via a `.env` file, as described above.
     jira-summarizer create secret generic jira-summarizer-secret
     --from-env-file=.env`
   - Apply the Kubernetes manifest: `kubectl -n jira-summarizer apply -f
-    jira-summarizer.yaml`  
+    jira-summarizer.yaml`
   *You may need to adjust the image specification in the manifest to point to
   your Docker image repository*
+
+### Summarizer API: `summarize_api.py`
+
+Generate JWT tokens for users to access the summarizer API:
+
+```console
+$ pipenv run ./summarize_api.py
+Loading .env environment variables...
+Usage: ./summarize_api.py <userid>
+```
+
+Run locally for development/testing:
+
+```console
+$ pipenv run flask --app summarize_api.py run
+Loading .env environment variables...
+ * Tip: There are .env or .flaskenv files present. Do "pip install
+   python-dotenv" to use them.
+ * Serving Flask app 'summarize_api.py'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment.
+Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+```
+
+The API can then be tested via curl:
+
+```console
+$ curl -s -H "Authorization: Bearer YOUR_GENERATED_API_TOKEN" \
+http://127.0.0.1:5000/api/v1/summarize-issue?key=PROJ-1234 | jq . -r
+{
+  "key": "PROJ-1234",
+  "stats": {
+    "fetchrelated_time": 1.436011292,
+    "getissue_time": 0.284554751,
+    "llm_time": 5.364057366,
+    "request_time": 7.088276041
+  },
+  "summary": "This is the issue summary.",
+  "user": "zzz"
+}
+```
+
+To run in OpenShift:
+
+- Create the Namespace and Secret as described above
+- Apply the Kubernetes manifest: `kubectl -n jira-summarizer apply -f summarize-api.yaml`

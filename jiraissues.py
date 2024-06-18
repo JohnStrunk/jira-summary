@@ -2,6 +2,7 @@
 
 import logging
 import queue
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, List, Optional, Set
@@ -553,6 +554,7 @@ class IssueCache:
         fetch_count: int = 0
 
     def __init__(self, max_size: int) -> None:
+        self.lock = threading.Lock()
         self._cache: dict[str, IssueCache.Entry] = {}
         self.hits = 0
         self.tries = 0
@@ -571,23 +573,24 @@ class IssueCache:
         Returns:
             The issue object.
         """
-        self.tries += 1
-        if key not in self._cache:
-            _logger.debug("Cache miss: %s", key)
-            if len(self._cache) == self.max_size:
-                # Remove the least recently used entry from the cache as
-                # determined by last_used_time
-                del self._cache[
-                    min(self._cache, key=lambda k: self._cache[k].last_used_time)
-                ]
-            issue = Issue(client, key)
-            self._cache[key] = IssueCache.Entry(issue)
-        else:
-            self.hits += 1
-            _logger.debug("Cache hit: %s", key)
-            self._cache[key].fetch_count += 1
-            self._cache[key].last_used_time = datetime.now()
-        return self._cache[key].issue
+        with self.lock:
+            self.tries += 1
+            if key not in self._cache:
+                _logger.debug("Cache miss: %s", key)
+                if len(self._cache) == self.max_size:
+                    # Remove the least recently used entry from the cache as
+                    # determined by last_used_time
+                    del self._cache[
+                        min(self._cache, key=lambda k: self._cache[k].last_used_time)
+                    ]
+                issue = Issue(client, key)
+                self._cache[key] = IssueCache.Entry(issue)
+            else:
+                self.hits += 1
+                _logger.debug("Cache hit: %s", key)
+                self._cache[key].fetch_count += 1
+                self._cache[key].last_used_time = datetime.now()
+            return self._cache[key].issue
 
     def remove(self, key: str) -> None:
         """
@@ -596,8 +599,9 @@ class IssueCache:
         Parameters:
             - key: The key of the issue to remove.
         """
-        if key in self._cache:
-            del self._cache[key]
+        with self.lock:
+            if key in self._cache:
+                del self._cache[key]
 
     def remove_older_than(self, when: datetime) -> None:
         """
@@ -607,17 +611,20 @@ class IssueCache:
         Parameters:
             - when: The time before which to remove issues.
         """
-        for key in list(self._cache.keys()):
-            if self._cache[key].insert_time < when:
-                del self._cache[key]
+        with self.lock:
+            for key in list(self._cache.keys()):
+                if self._cache[key].insert_time < when:
+                    del self._cache[key]
 
     def clear(self) -> None:
         """Clear the cache."""
-        self._cache = {}
+        with self.lock:
+            self._cache = {}
 
     def __str__(self) -> str:
-        hr = self.hits * 100 / self.tries if self.tries > 0 else 0
-        return f"Hits: {self.hits} ({hr:.1f}%), Tries: {self.tries}, Size: {len(self._cache)}"
+        with self.lock:
+            hr = self.hits * 100 / self.tries if self.tries > 0 else 0
+            return f"Hits: {self.hits} ({hr:.1f}%), Tries: {self.tries}, Size: {len(self._cache)}"
 
 
 # The global cache of issues

@@ -1,10 +1,14 @@
 """Collect some simple performance statistics"""
 
 import atexit
+import threading
 import time
+from copy import copy
 from dataclasses import dataclass
 from sys import stderr
 from typing import Callable, ParamSpec, TextIO, TypeVar
+
+_lock = threading.Lock()
 
 
 class Timer:
@@ -42,35 +46,40 @@ class Timer:
     @classmethod
     def clear(cls) -> None:
         """Clear the timer statistics"""
-        cls._db.clear()
+        with _lock:
+            cls._db.clear()
 
     @classmethod
     def dump(cls, out: TextIO = stderr) -> None:
         """Dump the timer statistics"""
-        if not cls._db:
-            return  # No timers have been used
-        name_size = max(len(t.name) for t in cls._db.values()) + 1
-        header = f"{'Name':<{name_size}} {'Count':>8} {'Avg':>8}  {'Total':>10}"
-        print(header, file=out)
-        print("-" * len(header), file=out)
-        for t in cls._db.values():
-            elapsed_s = t.elapsed_ns / 1000000000
-            print(
-                f"{t.name+":":<{name_size}} {t.count:>8}"
-                + f" {elapsed_s/t.count:>8.3f}s {elapsed_s:>10.3f}s",
-                file=out,
-            )
+        with _lock:
+            if not cls._db:
+                return  # No timers have been used
+            name_size = max(len(t.name) for t in cls._db.values()) + 1
+            header = f"{'Name':<{name_size}} {'Count':>8} {'Avg':>8}  {'Total':>10}"
+            print(header, file=out)
+            print("-" * len(header), file=out)
+            for t in cls._db.values():
+                elapsed_s = t.elapsed_ns / 1000000000
+                print(
+                    f"{t.name+":":<{name_size}} {t.count:>8}"
+                    + f" {elapsed_s/t.count:>8.3f}s {elapsed_s:>10.3f}s",
+                    file=out,
+                )
 
     @classmethod
     def stats(cls, name: str) -> Stats:
         """Get the statistics for a named timer"""
-        return cls._db.get(name) or cls.Stats(name)
+        with _lock:
+            stats = cls._db.get(name) or cls.Stats(name)
+            return copy(stats)
 
     def _save(self) -> None:
-        stats = Timer._db.get(self.name) or Timer.Stats(self.name)
-        stats.count += 1
-        stats.elapsed_ns += self.elapsed_ns
-        Timer._db[self.name] = stats
+        with _lock:
+            stats = Timer._db.get(self.name) or Timer.Stats(self.name)
+            stats.count += 1
+            stats.elapsed_ns += self.elapsed_ns
+            Timer._db[self.name] = stats
 
     def __init__(self, name: str, autostart: bool = False):
         self.name = name

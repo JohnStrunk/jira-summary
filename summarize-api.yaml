@@ -58,6 +58,8 @@ spec:
           args:
             - "--bind=0.0.0.0:8000"
             - "--access-logfile=-"
+            # - "--workers=16"
+            # - "--timeout=600"
             - "summarize_api:create_app()"
           envFrom:
             - secretRef:
