@@ -40,6 +40,11 @@ class Timer:
     _db: dict[str, Stats] = {}
 
     @classmethod
+    def clear(cls) -> None:
+        """Clear the timer statistics"""
+        cls._db.clear()
+
+    @classmethod
     def dump(cls, out: TextIO = stderr) -> None:
         """Dump the timer statistics"""
         if not cls._db:
@@ -55,6 +60,11 @@ class Timer:
                 + f" {elapsed_s/t.count:>8.3f}s {elapsed_s:>10.3f}s",
                 file=out,
             )
+
+    @classmethod
+    def stats(cls, name: str) -> Stats:
+        """Get the statistics for a named timer"""
+        return cls._db.get(name) or cls.Stats(name)
 
     def _save(self) -> None:
         stats = Timer._db.get(self.name) or Timer.Stats(self.name)
