@@ -35,6 +35,12 @@ def main():
         help="Do not update the Jira issues with the summaries",
     )
     parser.add_argument(
+        "-p",
+        "--prompt-only",
+        action="store_true",
+        help="Print the LLM prompt, but do not generate the summary",
+    )
+    parser.add_argument(
         "-r",
         "--regenerate",
         action="store_true",
@@ -51,12 +57,17 @@ def main():
     max_depth = args.max_depth
     regenerate = args.regenerate
     send_updates = not args.no_update
+    prompt_only = args.prompt_only
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
     issue = Issue(jira, args.jira_issue_key)
     out = summarize_issue(
-        issue, regenerate=regenerate, max_depth=max_depth, send_updates=send_updates
+        issue,
+        regenerate=regenerate,
+        max_depth=max_depth,
+        send_updates=send_updates,
+        return_prompt_only=prompt_only,
     )
     print(out)
 

@@ -89,9 +89,12 @@ def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too
 
     # If the current summary is up-to-date and we're not asked to regenerate it,
     # return what's there
-    if not regenerate and is_summary_current(issue):
+    if not regenerate and is_summary_current(issue) and not return_prompt_only:
         _logger.info("Summarizing (using current): %s", issue)
         return _wrapper.get(issue.status_summary) or ""
+
+    if return_prompt_only:
+        send_updates = False
 
     _logger.info("Summarizing: %s", issue)
     # if we have not reached max-depth, summarize the child issues for inclusion in this summary
@@ -159,7 +162,7 @@ def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too
             related_block.write(f"* {issue.key} {child.how} {ri}\n")
         else:
             related_block.write(
-                f"* {issue.key} {child.how} {child.key} which can be summarized as:\n"
+                f"* {issue.key} {child.how} {child.key}, and {child.key} can be summarized as:\n"
             )
             related_block.write(
                 textwrap.fill(
@@ -188,9 +191,7 @@ Status/Resolution: {issue.status}/{issue.resolution}
 
     llm_prompt = f"""\
 You are a helpful assistant who is an expert in software development.
-* Summarize the status of the following Jira issue in a few sentences.
-* Include an overview of any significant discussions or decisions, with their reasoning and outcome.
-* Highlight any recent updates or changes that effect the completion of the issue.
+{_prompt_for_type(issue)}
 * Use only the information below to create your summary.
 * Include only the text of your summary in the response with no formatting.
 * Limit your summary to 100 words or less.
@@ -215,6 +216,71 @@ You are a helpful assistant who is an expert in software development.
             _wrapper.upsert(issue.status_summary, folded_summary)
         )
     return folded_summary
+
+
+def _prompt_for_type(issue: Issue) -> str:
+    """
+    Generate a prompt for the type of issue.
+
+    Parameters:
+        - issue: The issue to generate the prompt for
+
+    Returns:
+        The prompt
+    """
+    # pylint: disable=line-too-long
+    default_prompt = textwrap.dedent(
+        f"""\
+        You are an AI assistant summarizing a Jira {issue.issue_type} for software engineers.
+        Provide a concise summary focusing on:
+
+        1. Technical details and implementation challenges
+        2. Decisions on technical approaches or tools
+        3. Blockers or dependencies affecting progress
+        4. Overall purpose and current status
+        5. Relevant information from child issues
+        6. Recent, impactful updates or changes
+
+        Use only the provided information. Limit your summary to 100 words or
+        fewer, with no additional formatting. Today's date is {datetime.now().strftime("%A, %B %d, %Y")}.
+        """
+    ).strip()
+    if issue.level == 3:  # Epic, Release Milestone
+        return textwrap.dedent(
+            f"""\
+            You are an AI assistant summarizing a Jira {issue.issue_type} for product
+            managers. Provide a concise summary focusing on:
+
+            1. Overall progress and timeline adherence
+            2. Major risks or obstacles to completion
+            3. Key decisions impacting the product roadmap
+            4. High-level purpose and current status
+            5. Relevant information from child issues
+            6. Recent, impactful updates or changes
+
+            Use only the provided information. Limit your summary to 100 words or fewer,
+            with no additional formatting. Today's date is {datetime.now().strftime("%A, %B %d, %Y")}.
+            """
+        ).strip()
+    if issue.level >= 4:  # Feature, Initiative, Requirement
+        return textwrap.dedent(
+            f"""\
+            You are an AI assistant summarizing a Jira {issue.issue_type} for corporate leaders. Provide a concise summary
+            focusing on:
+
+            1. High-level overview of progress towards the goal
+            2. Significant milestones achieved or upcoming
+            3. Major risks or opportunities identified
+            4. Overall purpose and current status
+            5. Key information from child issues
+            6. Recent, impactful updates affecting the outcome
+
+            Use only the provided information. Limit your summary to 100 words
+            or fewer, with no additional formatting. Today's date is
+            {datetime.now().strftime("%A, %B %d, %Y")}.
+            """
+        ).strip()
+    return default_prompt
 
 
 def summary_last_updated(issue: Issue) -> datetime:
@@ -400,7 +466,8 @@ def get_issues_to_summarize(
     updated_issues = check_response(
         with_retry(
             lambda: client.jql(
-                f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{since_string}' ORDER BY updated ASC",  # pylint: disable=line-too-long
+                f"labels = '{SUMMARY_ALLOWED_LABEL}' and updated >= '{
+                    since_string}' ORDER BY updated ASC",  # pylint: disable=line-too-long
                 limit=limit,
                 fields="key,updated",
             )
