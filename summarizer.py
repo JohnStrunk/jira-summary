@@ -209,13 +209,10 @@ You are a helpful assistant who is an expert in software development.
 
     chat = get_chat_model()
     summary = chat.invoke(llm_prompt, stop=["<|endoftext|>"]).strip()
-    folded_summary = textwrap.fill(summary, width=_WRAP_COLUMN)
     if send_updates and is_ok_to_post_summary(issue):
         # Replace any existing AI summary w/ the updated one
-        issue.update_status_summary(
-            _wrapper.upsert(issue.status_summary, folded_summary)
-        )
-    return folded_summary
+        issue.update_status_summary(_wrapper.upsert(issue.status_summary, summary))
+    return summary
 
 
 def _prompt_for_type(issue: Issue) -> str:
