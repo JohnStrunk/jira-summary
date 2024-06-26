@@ -9,6 +9,7 @@ import os
 from atlassian import Jira  # type: ignore
 
 from jiraissues import Issue
+from simplestats import Timer
 from summarizer import summarize_issue
 
 
@@ -73,4 +74,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with Timer(__name__):
+        main()

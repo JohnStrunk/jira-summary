@@ -22,6 +22,8 @@ import summarizer
 from jiraissues import issue_cache
 from simplestats import Timer
 
+_DEFAULT_RECURSION_DEPTH = 0
+
 
 def create_app():
     """Create the Flask app"""
@@ -51,7 +53,7 @@ def create_app():
         issue_cache.remove(key)
 
         issue = issue_cache.get_issue(client, key)
-        summary = summarizer.summarize_issue(issue, max_depth=1)
+        summary = summarizer.summarize_issue(issue, max_depth=_DEFAULT_RECURSION_DEPTH)
         req.stop()
         getissue_stats = Timer.stats("IssueCache.get_issue")
         fetchrelated_stats = Timer.stats("Issue._fetch_related")
