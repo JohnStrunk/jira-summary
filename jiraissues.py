@@ -226,6 +226,16 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             + f"{self.summary} ({self.status}/{self.resolution})"
         )
 
+    def __lt__(self, other: "Issue") -> bool:
+        # Issue keys consist of a prefix and a number such as ABCD-1234. We
+        # define the sort order based on the prefix as a string, followed by the
+        # number as an integer.
+        self_prefix, self_number = self.key.split("-")
+        other_prefix, other_number = other.key.split("-")
+        if self_prefix != other_prefix:
+            return self_prefix < other_prefix
+        return int(self_number) < int(other_number)
+
     @measure_function
     def _fetch_changelog(self) -> List[ChangelogEntry]:
         """Fetch the changelog from the API."""
@@ -490,7 +500,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         """
         _logger.info("Sending updated status summary for %s to server", self.key)
         fields = {CF_STATUS_SUMMARY: contents}
-        with_retry(lambda: self.client.update_issue_field(self.key, fields))  # type: ignore
+        with_retry(
+            lambda: self.client.update_issue_field(self.key, fields)
+        )  # type: ignore
         self.status_summary = contents
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
@@ -503,7 +515,9 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         """
         _logger.info("Sending updated labels for %s to server", self.key)
         fields = {"labels": list(new_labels)}
-        with_retry(lambda: self.client.update_issue_field(self.key, fields))  # type: ignore
+        with_retry(
+            lambda: self.client.update_issue_field(self.key, fields)
+        )  # type: ignore
         self.labels = new_labels
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
