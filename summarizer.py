@@ -4,7 +4,7 @@ import io
 import logging
 import os
 import textwrap
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, List, Optional, Tuple, Union
 
 import genai.exceptions
@@ -593,7 +593,9 @@ def add_summary_label_to_descendants(client: Jira, issue_key: str) -> None:
 
 
 @measure_function
-def rollup_contributors(issue: Issue, include_assignee=True) -> set[User]:
+def rollup_contributors(
+    issue: Issue, include_assignee=True, active_days: int = 0
+) -> set[User]:
     """
     Roll up the set of contributors from the issue and its children.
 
@@ -601,15 +603,87 @@ def rollup_contributors(issue: Issue, include_assignee=True) -> set[User]:
         - issue: The issue to roll up the contributors from
         - include_assignee: Include the issue assignee in the set of
           contributors
+        - active_days: Only include contributors if the issue has been updated
+          within the last `active_days` days. If 0, include contributors from
+          all issues.
 
     Returns:
         The set of contributors
     """
-    contributors = set()
+    contributors: set[User] = set()
     for child in issue.children:
         child_issue = issue_cache.get_issue(issue.client, child.key)
-        contributors.update(rollup_contributors(child_issue))
-    contributors.update(issue.contributors)
-    if include_assignee and issue.assignee is not None:
-        contributors.add(issue.assignee)
+        contributors.update(
+            rollup_contributors(child_issue, include_assignee, active_days)
+        )
+    if active_days == 0 or is_active(issue, active_days):
+        contributors.update(issue.contributors)
+        if include_assignee and issue.assignee is not None:
+            contributors.add(issue.assignee)
     return contributors
+
+
+def is_active(issue: Issue, within_days: int, recursive: bool = False) -> bool:
+    """
+    Determine if an issue is active.
+
+    An issue is considered active if it has been updated in the last
+    `within_days` days or carries the "active" label. Changes to certain fields
+    are ignored when determining the last update time.
+
+    Parameters:
+        - issue: The issue to check
+        - within_days: The number of days to consider as active
+        - recursive: If True, recursively check child issues
+
+    Returns:
+        True if the issue is active, False otherwise
+    """
+    excluded_fields = {"Jira Link", "Status Summary", "Test Link", "labels"}
+
+    if "active" in issue.labels:
+        _logger.debug("Issue %s is active: has the 'active' label", issue.key)
+        return True
+    for change in issue.changelog:
+        if change.created > datetime.now(UTC) - timedelta(days=within_days):
+            if any(chg.field not in excluded_fields for chg in change.changes):
+                _logger.debug(
+                    "Issue %s is active; [%s] changed on %s",
+                    issue.key,
+                    ",".join([chg.field for chg in change.changes]),
+                    change.created,
+                )
+                return True
+    if recursive:
+        for child in issue.children:
+            if is_active(
+                issue_cache.get_issue(issue.client, child.key), within_days, recursive
+            ):
+                _logger.debug(
+                    "Issue %s is active; because %s is active", issue.key, child.key
+                )
+                return True
+    _logger.debug("Issue %s is inactive", issue.key)
+    return False
+
+
+def active_children(issue: Issue, within_days: int, recursive: bool) -> set[Issue]:
+    """
+    Get the set of active child issues for an issue.
+
+    Parameters:
+        - issue: The issue to check
+        - within_days: The number of days to consider as active
+        - recursive: If True, recursively check entire child issue tree
+
+    Returns:
+        The set of active child issues
+    """
+    active = set()
+    for child in issue.children:
+        child_issue = issue_cache.get_issue(issue.client, child.key)
+        if is_active(child_issue, within_days):
+            active.add(child_issue)
+        if recursive:
+            active.update(active_children(child_issue, within_days, recursive))
+    return active
