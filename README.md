@@ -13,6 +13,9 @@ The following variables are required:
 
 - `ALLOWED_PROJECTS`: A comma-separated list of Jira project keys that the bot
   is allowed to summarize (e.g., `ALLOWED_PROJECTS=OCTO,OCTOET`) (for the bot)
+- `CONFLUENCE_TOKEN`: A Confluence PAT token that will allow updating the
+  Confluence pages with the summaries (for `rollup_status.py`)
+- `CONFLUENCE_URL`: The URL for the Confluence instance (e.g., `https://...`)
 - `GENAI_API`: The API endpoint for the IBM AI model (e.g., `https://...`)
 - `GENAI_KEY`: Your API key for the IBM AI model
 - `JIRA_TOKEN`: A JIRA PAT token that will allow retrieving issues from Jira as

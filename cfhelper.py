@@ -102,6 +102,17 @@ class CFElement(ET.Element):
             >>> e = CFElement("p").add("Hello, ").add(CFElement("b", content="world")).add("!")
             >>> print(ET.tostring(e, encoding="unicode"))
             <p>Hello, <b>world</b>!</p>
+
+            # Simple text can be concatenated as well
+            >>> e = CFElement("p").add("Hello, ").add("world").add("!")
+            >>> print(ET.tostring(e, encoding="unicode"))
+            <p>Hello, world!</p>
+
+            # Multiple elements
+            >>> e = CFElement("p").add(CFElement("b", content="Hello")).add(", ")
+            >>> _ = e.add(CFElement("i", content="world")).add("!")
+            >>> print(ET.tostring(e, encoding="unicode"))
+            <p><b>Hello</b>, <i>world</i>!</p>
         """
         if isinstance(content, int):
             content = str(content)
@@ -111,7 +122,8 @@ class CFElement(ET.Element):
                 self[-1].tail = self[-1].tail or ""
                 self[-1].tail += content
             else:
-                self.text = content
+                self.text = self.text or ""
+                self.text += content
         else:
             self.append(content)
         return self
