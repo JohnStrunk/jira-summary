@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from atlassian import Confluence, Jira  # type: ignore
 
 from cfhelper import CFElement, jiralink
-from jiraissues import Issue, User, issue_cache
+from jiraissues import Issue, User, descendants, issue_cache
 from simplestats import Timer
 from summarizer import get_chat_model, is_active, rollup_contributors, summarize_issue
 
@@ -104,6 +104,33 @@ def element_contrib_list(header: str, contributors: set[User]) -> CFElement:
     )
 
 
+def categorize_issues(issues: set[Issue], inactive_days: int) -> dict[str, set[Issue]]:
+    """
+    Categorize issues by status
+
+    Parameters:
+        - issues: The set of issues to categorize
+        - inactive_days: Number of days before an issue is considered inactive
+
+    Returns:
+        A dictionary of categorized issues
+    """
+    categorized: dict[str, set[Issue]] = {}
+
+    categorized["active"] = {
+        issue for issue in issues if is_active(issue, inactive_days, False)
+    }
+    categorized["inactive"] = {
+        issue for issue in issues if not is_active(issue, inactive_days, False)
+    }
+    categorized["closed"] = {issue for issue in issues if issue.status == "Closed"}
+    categorized["backlog"] = {
+        issue for issue in issues if issue.status in ["Backlog", "New", "ToDo"]
+    }
+
+    return categorized
+
+
 def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
     """Main function"""
     # pylint: disable=duplicate-code
@@ -144,8 +171,8 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
     stime.start()
     logging.info("Collecting issue summaries for children of %s", issue_key)
     child_inputs: list[IssueSummary] = []
-    epic = issue_cache.get_issue(jclient, issue_key)
-    for child in epic.children:
+    initiative = issue_cache.get_issue(jclient, issue_key)
+    for child in initiative.children:
         issue = issue_cache.get_issue(jclient, child.key)
         if not is_active(issue, inactive_days, True):
             logging.info("Skipping inactive issue %s", issue.key)
@@ -196,20 +223,15 @@ Please provide just the summary paragraph, with no header.
 """
     exec_paragraph = textwrap.fill(llm.invoke(prompt, stop=["<|endoftext|>"]).strip())
 
-    # Generate the overall status update
-    parent_page_id = lookup_page(cclient, args.parent)
-
-    page_title = f"Initiative status: {epic.key} - {epic.summary}"
-
     # Root element for the page; tag doesn't matter as it will be stripped off later
     page = CFElement("root")
 
     # Top of the page; overall executive summary and initiative contributors
     page.add(CFElement("h1", content="Executive Summary"))
-    page.add(CFElement("p", content=jiralink(epic.key)))
+    page.add(CFElement("p", content=jiralink(initiative.key)))
     page.add(CFElement("p", content=exec_paragraph))
-    contributors = rollup_contributors(epic)
-    active_contributors = rollup_contributors(epic, active_days=inactive_days)
+    contributors = rollup_contributors(initiative)
+    active_contributors = rollup_contributors(initiative, active_days=inactive_days)
     if active_contributors:
         page.add(element_contrib_list("Active contributors", active_contributors))
     if contributors:
@@ -229,6 +251,27 @@ Please provide just the summary paragraph, with no header.
         if item.contributors:
             page.add(element_contrib_list("All contributors", item.contributors))
 
+        # Create counts for all descendant issues of the current epic issue
+        desc_keys = descendants(jclient, issue.key)
+        cats = categorize_issues(
+            {issue_cache.get_issue(jclient, key) for key in desc_keys},
+            inactive_days,
+        )
+        d_tag = CFElement("p", content=CFElement("b", content="Sub-issues: "))
+        counts: list[str] = []
+        if cats["active"]:
+            counts.append(f"{len(cats['active'])}(Active)")
+        if cats["closed"]:
+            counts.append(f"{len(cats['closed'])}(Closed)")
+        if cats["backlog"]:
+            counts.append(f"{len(cats['backlog'])}(Backlog)")
+        d_tag.add(", ".join(counts))
+        d_tag.add(f" — Total {len(desc_keys)}")
+        page.add(d_tag)
+
+    # Post the page to Confluence
+    parent_page_id = lookup_page(cclient, args.parent)
+    page_title = f"Initiative status: {initiative.key} - {initiative.summary}"
     cclient.update_or_create(parent_page_id, page_title, page.unwrap())
 
 
