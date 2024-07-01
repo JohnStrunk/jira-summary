@@ -1,0 +1,166 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: initiative-rollups
+spec:
+  schedule: "0 5 * * 1"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            ##################################################
+            ## OCTO-1
+            - name: rollup-1
+              image: ghcr.io/johnstrunk/jira-summarizer:latest
+              command:
+                - "/app/.venv/bin/python"
+                - "rollup-status.py"
+              args:
+                - "--log-level"
+                - "INFO"
+                - "--parent"
+                - "Initiative summaries"
+                - OCTO-1
+              envFrom:
+                - secretRef:
+                    name: jira-summarizer-secret
+                    optional: false
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "10m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "1000m"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              readOnlyRootFilesystem: true
+            ##################################################
+            ## OCTO-2
+            - name: rollup-2
+              image: ghcr.io/johnstrunk/jira-summarizer:latest
+              command:
+                - "/app/.venv/bin/python"
+                - "rollup-status.py"
+              args:
+                - "--log-level"
+                - "INFO"
+                - "--parent"
+                - "Initiative summaries"
+                - OCTO-2
+              envFrom:
+                - secretRef:
+                    name: jira-summarizer-secret
+                    optional: false
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "10m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "1000m"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              readOnlyRootFilesystem: true
+            ##################################################
+            ## OCTO-3
+            - name: rollup-3
+              image: ghcr.io/johnstrunk/jira-summarizer:latest
+              command:
+                - "/app/.venv/bin/python"
+                - "rollup-status.py"
+              args:
+                - "--log-level"
+                - "INFO"
+                - "--parent"
+                - "Initiative summaries"
+                - OCTO-3
+              envFrom:
+                - secretRef:
+                    name: jira-summarizer-secret
+                    optional: false
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "10m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "1000m"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              readOnlyRootFilesystem: true
+            ##################################################
+            ## OCTO-4
+            - name: rollup-4
+              image: ghcr.io/johnstrunk/jira-summarizer:latest
+              command:
+                - "/app/.venv/bin/python"
+                - "rollup-status.py"
+              args:
+                - "--log-level"
+                - "INFO"
+                - "--parent"
+                - "Initiative summaries"
+                - OCTO-4
+              envFrom:
+                - secretRef:
+                    name: jira-summarizer-secret
+                    optional: false
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "10m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "1000m"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              readOnlyRootFilesystem: true
+            ##################################################
+            ## OCTO-6
+            - name: rollup-6
+              image: ghcr.io/johnstrunk/jira-summarizer:latest
+              command:
+                - "/app/.venv/bin/python"
+                - "rollup-status.py"
+              args:
+                - "--log-level"
+                - "INFO"
+                - "--parent"
+                - "Initiative summaries"
+                - OCTO-6
+              envFrom:
+                - secretRef:
+                    name: jira-summarizer-secret
+                    optional: false
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "10m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "1000m"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              readOnlyRootFilesystem: true
+          securityContext:
+            runAsNonRoot: true
+          terminationGracePeriodSeconds: 10
+          restartPolicy: OnFailure
