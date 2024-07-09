@@ -1,0 +1,33 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: jira-summarizer
+  namespace: openshift-gitops
+spec:
+  destinations:
+    - name: in-cluster
+      namespace: jira-summarizer
+      server: "https://kubernetes.default.svc"
+  sourceRepos:
+    - "https://github.com/johnstrunk/jira-summary.git"
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jira-summarizer
+  namespace: openshift-gitops
+spec:
+  destination:
+    name: in-cluster
+    namespace: jira-summarizer
+  project: jira-summarizer
+  source:
+    path: deploy/manifests
+    repoURL: "https://github.com/johnstrunk/jira-summary.git"
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
