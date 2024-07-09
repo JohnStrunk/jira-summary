@@ -52,7 +52,7 @@ spec:
     spec:
       containers:
         - name: summarize-api
-          image: ghcr.io/johnstrunk/jira-summarizer:1.4.0@sha256:6c0f4b1dfb9f1dd85254872ae4293a1860153797bf6d10bf60f926648d235d84
+          image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
           command:
             - "/app/.venv/bin/gunicorn"
           args:
