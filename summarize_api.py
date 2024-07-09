@@ -19,10 +19,39 @@ from flask_jwt_extended import (
 )
 
 import summarizer
-from jiraissues import issue_cache
+from jiraissues import Issue, issue_cache
 from simplestats import Timer
 
 _DEFAULT_RECURSION_DEPTH = 0
+
+
+def issue_word_count(issue: Issue, max_depth: int = _DEFAULT_RECURSION_DEPTH) -> int:
+    """
+    Count the words in the text representation of a Jira issue
+
+    Parameters:
+        - issue: The Jira issue to count the words in
+        - max_depth: The maximum depth to recurse into the issue's related issues
+    Returns:
+        - The number of words in the issue's text representation
+    """
+    full_prompt = summarizer.summarize_issue(issue, max_depth, return_prompt_only=True)
+    # Get the text between the ``` delimiters, which is the actual Jira issue
+    # text that we send to the model
+    issue_text = full_prompt[full_prompt.find("```") + 3 : full_prompt.rfind("```")]
+    return word_count(issue_text)
+
+
+def word_count(text: str) -> int:
+    """
+    Count the words in a string
+
+    Parameters:
+        - text: The string to count the words in
+    Returns:
+        - The number of words in the string
+    """
+    return len(text.split())
 
 
 def create_app():
@@ -53,6 +82,7 @@ def create_app():
         issue_cache.remove(key)
 
         issue = issue_cache.get_issue(client, key)
+        issue_words = issue_word_count(issue)
         summary = summarizer.summarize_issue(issue, max_depth=_DEFAULT_RECURSION_DEPTH)
         req.stop()
         getissue_stats = Timer.stats("IssueCache.get_issue")
@@ -68,6 +98,8 @@ def create_app():
                 "getissue_time": getissue_stats.elapsed_ns / 1000000000,
                 "llm_time": llm_stats.elapsed_ns / 1000000000,
                 "request_time": req.elapsed_ns / 1000000000,
+                "issue_words": issue_words,
+                "summary_words": word_count(summary),
             },
         }
 
