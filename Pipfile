@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-atlassian-python-api = "3.41.11"
+atlassian-python-api = "*"
 langchain = "*"
 ibm-generative-ai = "*"
 backoff-utils = "*"
