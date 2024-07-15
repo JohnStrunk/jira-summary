@@ -11,6 +11,7 @@ backoff-utils = "*"
 flask = "*"
 flask-jwt-extended = "*"
 gunicorn = "*"
+sqlalchemy = "*"
 
 [dev-packages]
 ipykernel = "*"
