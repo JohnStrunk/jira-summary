@@ -90,7 +90,7 @@ def memory_db() -> Engine:
     return engine
 
 
-def get_summary(db: Engine, issue_key: str, stale_ok: bool) -> Optional[str]:
+def get_summary(db: Engine, issue_key: str, stale_ok: bool = False) -> Optional[str]:
     """
     Get the AI summary for the given Jira issue key if it exists.
 
@@ -133,9 +133,10 @@ def update_summary(
         session.merge(record)
         # Since the parent summaries are influenced by their children, mark the
         # parent summary as stale when the child summary is updated
-        parent = session.get(Summary, parent_key)
-        if parent is not None and parent.stale_ts is None:
-            parent.stale_ts = now
+        if parent_key is not None:
+            parent = session.get(Summary, parent_key)
+            if parent is not None and parent.stale_ts is None:
+                parent.stale_ts = now
         session.commit()
 
 
@@ -176,7 +177,7 @@ def get_stale_issues(db: Engine, limit: int = 0) -> list[str]:
         query = (
             session.query(Summary)
             .filter(Summary.stale_ts.isnot(None))
-            .order_by(Summary.stale_ts)
+            .order_by(Summary.stale_ts.asc())
         )
         if limit > 0:
             query = query.limit(limit)
