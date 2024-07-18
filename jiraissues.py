@@ -5,6 +5,8 @@ import queue
 import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import reduce
+from operator import getitem
 from typing import Any, List, Optional, Set
 from zoneinfo import ZoneInfo
 
@@ -33,6 +35,40 @@ BACKOFF_EXCEPTIONS: list[type[Exception]] = [
 ]
 # The Jira API seems to be limited to < 10 QPS
 BACKOFF_STRATEGY = strategies.Exponential(minimum=0.1, maximum=60, factor=2)
+
+
+def rget(d: dict, *path, default=None) -> Any:
+    # Based on:
+    # https://stackoverflow.com/questions/28225552/is-there-a-recursive-version-of-the-dict-get-built-in
+    """
+    A recursive version of dict.get().
+
+    Parameters:
+        - d: The dictionary to search.
+        - path: The path to the key to get.
+        - default: The default value to return if any key along the path is not
+          found.
+
+    Returns:
+        The value of the key, or the default value if the key is not found.
+
+    Examples:
+    >>> rget({"a": {"b": {"c": 42}}}, "a", "b", "c")
+    42
+    >>> rget({"a": {"b": {"c": 42}}}, "a", "b", "z")  # returns None
+    >>> rget({"a": {"b": {"c": 42}}}, "a", "b", "z", default="Not found")
+    'Not found'
+    >>> rget({"a": {"b": {"c": 42}}}, "a", "b")
+    {'c': 42}
+    >>> rget({"a": {"b": "not a dict"}}, "a", "b", "c", default="Not found")
+    'Not found'
+    """
+    try:
+        return reduce(getitem, path, d)
+    except KeyError:  # Element not found along path
+        return default
+    except TypeError:  # Element not a dict
+        return default
 
 
 def with_retry(func):
@@ -96,6 +132,7 @@ class Comment:
     """The content of the comment."""
 
 
+# How issues are related: MAIN <relationship> RELATED
 _HOW_SUBTASK = "has a sub-task"
 _HOW_INEPIC = "is the Epic issue for"
 _HOW_INPARENT = "is the parent issue of"
@@ -108,12 +145,23 @@ class RelatedIssue:
     key: str
     """The Jira key of the related issue"""
     how: str
-    """How the related issue is related to the main issue"""
+    """How the issue is related to the main issue"""
+    summary: str
+    """The title of the issue"""
+    issue_type: str
+    """The type of the issue (e.g., "Task")"""
+    status: str
+    """The status of the issue"""
+    resolution: str
+    """The resolution of the issue"""
 
     @property
     def is_child(self) -> bool:
         """True if the related issue is a child of the main issue."""
         return self.how in [_HOW_SUBTASK, _HOW_INEPIC, _HOW_INPARENT]
+
+    def __str__(self) -> str:
+        return f"{self.key} ({self.issue_type}) - {self.summary} ({self.status}/{self.resolution})"
 
 
 class User:  # pylint: disable=too-few-public-methods
@@ -170,6 +218,8 @@ class Issue:  # pylint: disable=too-many-instance-attributes
             CF_CONTRIBUTORS,
             "comment",
             "assignee",
+            CF_EPIC_LINK,
+            CF_PARENT_LINK,
         ]
         # Need to Handle 403 errors
         # DEBUG:urllib3.connectionpool:https://server.com:443 "GET
@@ -186,38 +236,45 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         )
 
         # Populate the fields
-        self.summary: str = data["fields"]["summary"]
-        self.description: str = data["fields"]["description"] or ""
-        self.issue_type: str = data["fields"]["issuetype"]["name"]
-        self.project_key: str = data["fields"]["project"]["key"]
-        self._parent_key: Optional[str] = (
-            data.get("fields", {}).get("parent", {}).get("key", None)
-        )
-        self.status: str = data["fields"]["status"]["name"]
-        self.labels: Set[str] = set(data["fields"]["labels"])
-        self.resolution: str = (
-            data["fields"]["resolution"]["name"]
-            if data["fields"]["resolution"]
-            else "Unresolved"
+        self.summary: str = rget(data, "fields", "summary", default="")
+        self.description: str = rget(data, "fields", "description", default="")
+        self.issue_type: str = rget(data, "fields", "issuetype", "name", default="")
+        self.project_key: str = rget(data, "fields", "project", "key", default="")
+        self.status: str = rget(data, "fields", "status", "name", default="")
+        self.labels: Set[str] = set(rget(data, "fields", "labels", default=[]))
+        self.resolution: str = rget(
+            data, "fields", "resolution", "name", default="Unresolved"
         )
         # The "last updated" time is provided w/ TZ info
-        self.updated: datetime = datetime.fromisoformat(data["fields"]["updated"])
-        self.status_summary: str = data["fields"].get(CF_STATUS_SUMMARY) or ""
+        self.updated: datetime = datetime.fromisoformat(rget(data, "fields", "updated"))
+        self.status_summary: str = rget(data, "fields", CF_STATUS_SUMMARY, default="")
         self._changelog: Optional[List[ChangelogEntry]] = None
         self._comments: Optional[List[Comment]] = None
         # Go ahead and parse the comments to avoid an extra API call
-        self._comments = self._parse_comment_data(data["fields"]["comment"]["comments"])
+        self._comments = self._parse_comment_data(
+            rget(data, "fields", "comment", "comments", default=[])
+        )
         self._related: Optional[List[RelatedIssue]] = None
         # Some instances have None for the blocked flag instead of a value
-        blocked_dict = data["fields"].get(CF_BLOCKED) or {}
+        blocked_dict = rget(data, "fields", CF_BLOCKED, default={})
         self.blocked = str(blocked_dict.get("value", "False")).lower() in ["true"]
-        self.blocked_reason = str(data["fields"].get(CF_BLOCKED_REASON) or "")
+        self.blocked_reason: str = rget(data, "fields", CF_BLOCKED_REASON, default="")
         self.contributors = {
-            User(user) for user in (data["fields"].get(CF_CONTRIBUTORS) or [])
+            User(user) for user in (rget(data, "fields", CF_CONTRIBUTORS) or [])
         }
         self.assignee = (
             User(data["fields"]["assignee"]) if data["fields"]["assignee"] else None
         )
+        # The parent link can be from several sources. They are listed below in
+        # reverse order of preference:
+        self._parent_key: Optional[str] = rget(data, "fields", CF_EPIC_LINK)
+        self._parent_key = rget(
+            data, "fields", CF_PARENT_LINK, default=self._parent_key
+        )
+        self._parent_key = rget(
+            data, "fields", "parent", "key", default=self._parent_key
+        )
+
         _logger.info("Retrieved issue: %s", self)
 
     def __str__(self) -> str:
@@ -258,7 +315,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
                 )
             items.append(
                 ChangelogEntry(
-                    author=entry["author"]["displayName"],
+                    author=rget(entry, "author", "displayName", default=""),
                     created=datetime.fromisoformat(entry["created"]),
                     changes=changes,
                 )
@@ -288,7 +345,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         for comment in comments:
             items.append(
                 Comment(
-                    author=comment["author"]["displayName"],
+                    author=rget(comment, "author", "displayName", default=""),
                     created=datetime.fromisoformat(comment["created"]),
                     body=comment["body"],
                 )
@@ -308,8 +365,6 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         fields = [
             "issuelinks",
             "subtasks",
-            CF_EPIC_LINK,
-            CF_PARENT_LINK,
             CF_FEATURE_LINK,
         ]
         found_issues: set[str] = set()
@@ -321,9 +376,15 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         related: List[RelatedIssue] = []
         for link in data["fields"]["issuelinks"]:
             if "inwardIssue" in link and link["inwardIssue"]["key"] not in found_issues:
+                rfields = link["inwardIssue"]["fields"]
                 related.append(
                     RelatedIssue(
-                        key=link["inwardIssue"]["key"], how=link["type"]["inward"]
+                        key=link["inwardIssue"]["key"],
+                        how=link["type"]["inward"],
+                        summary=rfields["summary"],
+                        issue_type=rfields["issuetype"]["name"],
+                        status=rfields["status"]["name"],
+                        resolution=rfields["status"]["statusCategory"]["name"],
                     )
                 )
                 found_issues.add(link["inwardIssue"]["key"])
@@ -331,9 +392,15 @@ class Issue:  # pylint: disable=too-many-instance-attributes
                 "outwardIssue" in link
                 and link["outwardIssue"]["key"] not in found_issues
             ):
+                rfields = link["outwardIssue"]["fields"]
                 related.append(
                     RelatedIssue(
-                        key=link["outwardIssue"]["key"], how=link["type"]["outward"]
+                        key=link["outwardIssue"]["key"],
+                        how=link["type"]["outward"],
+                        summary=rfields["summary"],
+                        issue_type=rfields["issuetype"]["name"],
+                        status=rfields["status"]["name"],
+                        resolution=rfields["status"]["statusCategory"]["name"],
                     )
                 )
                 found_issues.add(link["outwardIssue"]["key"])
@@ -341,57 +408,113 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         # Get the sub-tasks
         for subtask in data["fields"]["subtasks"]:
             if subtask["key"] not in found_issues:
-                related.append(RelatedIssue(key=subtask["key"], how=_HOW_SUBTASK))
-                found_issues.add(subtask["key"])
-
-        # Get the parent task(s) and epic links from the custom fields
-        custom_fields = [
-            (CF_EPIC_LINK, "Epic Link"),  # Upward link to epic
-            (CF_PARENT_LINK, "Parent Link"),
-        ]
-        for cfield, how in custom_fields:
-            if cfield in data["fields"].keys() and data["fields"][cfield] is not None:
-                if data["fields"][cfield] not in found_issues:
-                    related.append(RelatedIssue(key=data["fields"][cfield], how=how))
-                    found_issues.add(data["fields"][cfield])
-
-        # The Feature Link has to be handled separately
-        if (
-            CF_FEATURE_LINK in data["fields"].keys()
-            and data["fields"][CF_FEATURE_LINK] is not None
-        ):
-            if data["fields"][CF_FEATURE_LINK]["key"] not in found_issues:
                 related.append(
                     RelatedIssue(
-                        key=data["fields"][CF_FEATURE_LINK]["key"],
-                        how="Feature Link",
+                        key=subtask["key"],
+                        how=_HOW_SUBTASK,
+                        summary=subtask["fields"]["summary"],
+                        issue_type=subtask["fields"]["issuetype"]["name"],
+                        status=subtask["fields"]["status"]["name"],
+                        resolution=subtask["fields"]["status"]["statusCategory"][
+                            "name"
+                        ],
                     )
                 )
-                found_issues.add(data["fields"][CF_FEATURE_LINK]["key"])
+                found_issues.add(subtask["key"])
+
+        # The Feature Link has to be handled separately
+        feature = rget(data, "fields", CF_FEATURE_LINK)
+        if feature is not None and feature["key"] not in found_issues:
+            related.append(
+                RelatedIssue(
+                    key=feature["key"],
+                    how="Feature Link",
+                    summary=rget(feature, "fields", "summary", default=""),
+                    issue_type=rget(
+                        feature, "fields", "issuetype", "name", default="unknown"
+                    ),
+                    status=rget(feature, "fields", "status", "name", default="unknown"),
+                    resolution=rget(
+                        feature,
+                        "fields",
+                        "status",
+                        "statusCategory",
+                        "name",
+                        default="unknown",
+                    ),
+                )
+            )
+            found_issues.add(feature["key"])
 
         # Issues in the epic requires a query since there's no pointer from the epic
         # issue to it's children. epic_issues returns an error if the issue is not
         # an Epic. These are downward links to children
         if self.issue_type == "Epic":
             issues_in_epic = check_response(
-                with_retry(lambda: self.client.epic_issues(self.key, fields="key"))
+                with_retry(
+                    lambda: self.client.epic_issues(
+                        self.key, fields="key, summary, issuetype, status"
+                    )
+                )
             )
             for i in issues_in_epic["issues"]:
                 if i["key"] not in found_issues:
-                    related.append(RelatedIssue(key=i["key"], how=_HOW_INEPIC))
+                    related.append(
+                        RelatedIssue(
+                            key=i["key"],
+                            how=_HOW_INEPIC,
+                            summary=rget(i, "fields", "summary", default=""),
+                            issue_type=rget(
+                                i, "fields", "issuetype", "name", default="unknown"
+                            ),
+                            status=rget(
+                                i, "fields", "status", "name", default="unknown"
+                            ),
+                            resolution=rget(
+                                i,
+                                "fields",
+                                "status",
+                                "statusCategory",
+                                "name",
+                                default="unknown",
+                            ),
+                        )
+                    )
                     found_issues.add(i["key"])
         else:
             # Non-epic issues use the parent link
             issues_with_parent = check_response(
                 with_retry(
                     lambda: self.client.jql(
-                        f"'Parent Link' = '{self.key}'", limit=50, fields="key"
+                        f"'Parent Link' = '{self.key}'",
+                        limit=200,
+                        fields="key, summary, issuetype, status",
                     )
                 )
             )
             for i in issues_with_parent["issues"]:
                 if i["key"] not in found_issues:
-                    related.append(RelatedIssue(key=i["key"], how=_HOW_INPARENT))
+                    related.append(
+                        RelatedIssue(
+                            key=i["key"],
+                            how=_HOW_INPARENT,
+                            summary=rget(i, "fields", "summary", default=""),
+                            issue_type=rget(
+                                i, "fields", "issuetype", "name", default="unknown"
+                            ),
+                            status=rget(
+                                i, "fields", "status", "name", default="unknown"
+                            ),
+                            resolution=rget(
+                                i,
+                                "fields",
+                                "status",
+                                "statusCategory",
+                                "name",
+                                default="unknown",
+                            ),
+                        )
+                    )
                     found_issues.add(i["key"])
 
         return related
@@ -501,8 +624,8 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         _logger.info("Sending updated status summary for %s to server", self.key)
         fields = {CF_STATUS_SUMMARY: contents}
         with_retry(
-            lambda: self.client.update_issue_field(self.key, fields)
-        )  # type: ignore
+            lambda: self.client.update_issue_field(self.key, fields)  # type: ignore
+        )
         self.status_summary = contents
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
@@ -516,8 +639,8 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         _logger.info("Sending updated labels for %s to server", self.key)
         fields = {"labels": list(new_labels)}
         with_retry(
-            lambda: self.client.update_issue_field(self.key, fields)
-        )  # type: ignore
+            lambda: self.client.update_issue_field(self.key, fields)  # type: ignore
+        )
         self.labels = new_labels
         issue_cache.remove(self.key)  # Invalidate any cached copy
 
