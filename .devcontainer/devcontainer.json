@@ -7,7 +7,7 @@
 	// Features to add to the dev container. See: https://containers.dev/features
 	"features": {
 		"ghcr.io/devcontainers/features/docker-in-docker:2.11.0": {},
-		"ghcr.io/devcontainers/features/github-cli:1.0.12": {},
+		"ghcr.io/devcontainers/features/github-cli:1.0.13": {},
 		"ghcr.io/devcontainers/features/node:1.5.0": {},
 		"ghcr.io/devcontainers-contrib/features/pipenv:2.0.17": {},
 		"ghcr.io/devcontainers-contrib/features/pre-commit:2.0.17": {},
