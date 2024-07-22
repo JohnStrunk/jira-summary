@@ -134,8 +134,8 @@ class Comment:
 
 # How issues are related: MAIN <relationship> RELATED
 _HOW_SUBTASK = "has a sub-task"
-_HOW_INEPIC = "is the Epic issue for"
-_HOW_INPARENT = "is the parent issue of"
+_HOW_INEPIC = "is the parent of"
+_HOW_INPARENT = "is the parent of"
 
 
 @dataclass
@@ -268,12 +268,8 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         # The parent link can be from several sources. They are listed below in
         # reverse order of preference:
         self._parent_key: Optional[str] = rget(data, "fields", CF_EPIC_LINK)
-        self._parent_key = rget(
-            data, "fields", CF_PARENT_LINK, default=self._parent_key
-        )
-        self._parent_key = rget(
-            data, "fields", "parent", "key", default=self._parent_key
-        )
+        self._parent_key = rget(data, "fields", CF_PARENT_LINK) or self._parent_key
+        self._parent_key = rget(data, "fields", "parent", "key") or self._parent_key
 
         _logger.info("Retrieved issue: %s", self)
 
