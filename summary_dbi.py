@@ -1,5 +1,6 @@
 """This package abstracts the interface to the AI summary database."""
 
+import os
 from datetime import UTC, datetime
 from typing import Optional
 
@@ -83,6 +84,38 @@ class Summary(_Base):  # pylint: disable=too-few-public-methods
 def memory_db() -> Engine:
     """Create an in-memory AI summary database."""
     engine = create_engine("sqlite+pysqlite:///:memory:", echo=True)
+
+    # Create the DB table(s) if they don't exist
+    _Base.metadata.create_all(engine)
+
+    return engine
+
+
+def mariadb_db(
+    host: str = "localhost",
+    port: int = 3306,
+    user: str = "root",
+    password: Optional[str] = None,
+    db_name: Optional[str] = None,
+) -> Engine:
+    """
+    Create a MariaDB AI summary database.
+
+    Parameters:
+        - host: MariaDB host
+        - port: MariaDB port
+        - user: MariaDB user
+        - password: MariaDB password (default: MARIADB_ROOT_PASSWORD environment)
+        - db_name: MariaDB database name (default: MARIADB_DATABASE environment)
+
+    Returns:
+        - Database engine
+    """
+    password = password or os.getenv("MARIADB_ROOT_PASSWORD")
+    database = db_name or os.getenv("MARIADB_DATABASE")
+    engine = create_engine(
+        f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
+    )
 
     # Create the DB table(s) if they don't exist
     _Base.metadata.create_all(engine)

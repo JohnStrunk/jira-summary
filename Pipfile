@@ -12,6 +12,7 @@ flask = "*"
 flask-jwt-extended = "*"
 gunicorn = "*"
 sqlalchemy = "*"
+pymysql = "*"
 
 [dev-packages]
 ipykernel = "*"

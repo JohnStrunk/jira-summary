@@ -5,24 +5,21 @@
 import argparse
 import logging
 import os
+import textwrap
+from typing import Optional
 
-from atlassian import Jira  # type: ignore
+from atlassian import Jira
+from click import Option  # type: ignore
 
 from jiraissues import Issue
 from simplestats import Timer
 from summarizer import summarize_issue
+from summary_dbi import get_summary, mariadb_db, memory_db, update_summary
 
 
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(description="Summarize a JIRA issue")
-    parser.add_argument(
-        "-d",
-        "--max-depth",
-        type=int,
-        default=1,
-        help="Maximum depth to recursively examine issues while summarizing",
-    )
     parser.add_argument(
         "--log-level",
         default="WARNING",
@@ -30,22 +27,10 @@ def main():
         help="Set the logging level",
     )
     parser.add_argument(
-        "-n",
-        "--no-update",
-        action="store_true",
-        help="Do not update the Jira issues with the summaries",
-    )
-    parser.add_argument(
         "-p",
         "--prompt-only",
         action="store_true",
         help="Print the LLM prompt, but do not generate the summary",
-    )
-    parser.add_argument(
-        "-r",
-        "--regenerate",
-        action="store_true",
-        help="Force regeneration of summaries",
     )
     parser.add_argument("jira_issue_key", type=str, help="JIRA issue key")
 
@@ -55,22 +40,30 @@ def main():
         format="%(asctime)s %(levelname)s:%(name)s - %(message)s",
         # datefmt="%Y-%m-%d %H:%M:%S.%f",
     )
-    max_depth = args.max_depth
-    regenerate = args.regenerate
-    send_updates = not args.no_update
     prompt_only = args.prompt_only
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
 
     issue = Issue(jira, args.jira_issue_key)
-    out = summarize_issue(
-        issue,
-        regenerate=regenerate,
-        max_depth=max_depth,
-        send_updates=send_updates,
-        return_prompt_only=prompt_only,
-    )
-    print(out)
+    db = mariadb_db()
+    summary: Optional[str] = None
+    if prompt_only:
+        summary = summarize_issue(
+            issue,
+            db,
+            return_prompt_only=prompt_only,
+        )
+        print(summary)
+    else:
+        summary = get_summary(db, issue.key)
+        if not summary:
+            summary = summarize_issue(
+                issue,
+                db,
+                return_prompt_only=prompt_only,
+            )
+            update_summary(db, issue.key, summary, issue.parent)
+        print(textwrap.fill(summary))
 
 
 if __name__ == "__main__":

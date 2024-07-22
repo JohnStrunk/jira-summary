@@ -142,3 +142,27 @@ To run in OpenShift:
 
 - Create the Namespace and Secret as described above
 - Apply the Kubernetes manifest: `kubectl -n jira-summarizer apply -f summarize-api.yaml`
+
+### MariaDB database
+
+The summarizer uses a MariaDB database to store the summaries.
+
+In the `.env` file, set the following variables:
+
+- `MARIADB_ROOT_PASSWORD`: The root password for the MariaDB database
+- `MARIADB_DATABASE`: The name of the database to create
+
+These variables should be made available to the scripts as well so that they can
+connect to the database.
+
+The database can now be started locally via:
+
+```console
+$ docker run -it --rm --env-file .env --name mariadb -p 127.0.0.1:3306:3306 \
+    -v mariadb_state:/var/lib/mysql:Z -d mariadb
+...hex container id...
+```
+
+The above stores the DB data in a Docker volume named `mariadb_state`. Leaving
+out the `-v` option will store the data in the container and it will be lost
+when the container is removed.
