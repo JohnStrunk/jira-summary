@@ -14,7 +14,7 @@ spec:
             ##################################################
             ## OCTO-1
             - name: rollup-1
-              image: ghcr.io/johnstrunk/jira-summarizer:1.5.0
+              image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
