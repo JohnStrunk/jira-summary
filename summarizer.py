@@ -246,14 +246,15 @@ def _prompt_for_type(issue: Issue) -> str:
         return textwrap.dedent(
             f"""\
             You are an AI assistant summarizing a Jira {issue.issue_type} for product
-            managers. Provide a concise summary focusing on:
+            managers. Provide a concise summary focusing on (in order of importance):
 
-            1. Overall progress and timeline adherence
-            2. Major risks or obstacles to completion
-            3. Key decisions impacting the product roadmap
-            4. High-level purpose and current status
-            5. Relevant information from child issues
-            6. Recent, impactful updates or changes
+            1. High-level purpose and current status
+            2. Overall progress and timeline adherence
+            3. Major risks or obstacles to completion
+            4. Key decisions impacting the product roadmap
+            5. Recent, impactful updates or changes and their statuses
+            6. Summarizing and tying together and relevant and new information that makes sense to include in the summary.
+            Do not include a list of names or identifying numbers of child issues in the summmary
 
             Use only the provided information. Limit your summary to 100 words or fewer,
             with no additional formatting. Today's date is {datetime.now().strftime("%A, %B %d, %Y")}.
