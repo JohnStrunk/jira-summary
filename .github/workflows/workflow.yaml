@@ -86,7 +86,7 @@ jobs:
 
       - name: Set up Docker Buildx
         # https://github.com/docker/setup-buildx-action
-        uses: docker/setup-buildx-action@aa33708b10e362ff993539393ff100fa93ed6a27 # v3.5.0
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
         id: setup-buildx
 
       - name: Expose variables required for actions cache
@@ -113,7 +113,7 @@ jobs:
 
       - name: Set up Docker Buildx
         # https://github.com/docker/setup-buildx-action
-        uses: docker/setup-buildx-action@aa33708b10e362ff993539393ff100fa93ed6a27 # v3.5.0
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
         id: setup-buildx
 
       - name: Login to GitHub Container Registry
@@ -173,7 +173,7 @@ jobs:
         # Match the push condition above
         if: github.event_name != 'pull_request'
         # https://github.com/actions/attest-build-provenance
-        uses: actions/attest-build-provenance@5e9cb68e95676991667494a6a4e59b8a2f13e1d0 # v1.3.3
+        uses: actions/attest-build-provenance@210c1913531870065f03ce1f9440dd87bc0938cd # v1.4.0
         with:
           subject-name: ${{ env.CONTAINER_IMAGE }}
           subject-digest: ${{ steps.push.outputs.digest }}
