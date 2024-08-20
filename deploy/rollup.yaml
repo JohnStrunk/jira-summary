@@ -14,13 +14,15 @@ spec:
             ##################################################
             ## OCTO-1
             - name: rollup-1
-              image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
+              image: ghcr.io/johnstrunk/jira-summarizer
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
               args:
                 - "--log-level"
                 - "INFO"
+                - "--db-host"
+                - "summarizer-db"
                 - "--parent"
                 - "Initiative summaries"
                 - OCTO-1
@@ -44,13 +46,15 @@ spec:
             ##################################################
             ## OCTO-2
             - name: rollup-2
-              image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
+              image: ghcr.io/johnstrunk/jira-summarizer
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
               args:
                 - "--log-level"
                 - "INFO"
+                - "--db-host"
+                - "summarizer-db"
                 - "--parent"
                 - "Initiative summaries"
                 - OCTO-2
@@ -74,13 +78,15 @@ spec:
             ##################################################
             ## OCTO-3
             - name: rollup-3
-              image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
+              image: ghcr.io/johnstrunk/jira-summarizer
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
               args:
                 - "--log-level"
                 - "INFO"
+                - "--db-host"
+                - "summarizer-db"
                 - "--parent"
                 - "Initiative summaries"
                 - OCTO-3
@@ -104,13 +110,15 @@ spec:
             ##################################################
             ## OCTO-4
             - name: rollup-4
-              image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
+              image: ghcr.io/johnstrunk/jira-summarizer
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
               args:
                 - "--log-level"
                 - "INFO"
+                - "--db-host"
+                - "summarizer-db"
                 - "--parent"
                 - "Initiative summaries"
                 - OCTO-4
@@ -134,13 +142,15 @@ spec:
             ##################################################
             ## OCTO-6
             - name: rollup-6
-              image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
+              image: ghcr.io/johnstrunk/jira-summarizer
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
               args:
                 - "--log-level"
                 - "INFO"
+                - "--db-host"
+                - "summarizer-db"
                 - "--parent"
                 - "Initiative summaries"
                 - OCTO-6
