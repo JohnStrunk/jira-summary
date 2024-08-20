@@ -14,7 +14,7 @@ spec:
             ##################################################
             ## OCTO-1
             - name: rollup-1
-              image: ghcr.io/johnstrunk/jira-summarizer
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:a05c518d4912ae1c45351162c2916ddb691a79f103c86f5d13b3be3c492e5596
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
@@ -46,7 +46,7 @@ spec:
             ##################################################
             ## OCTO-2
             - name: rollup-2
-              image: ghcr.io/johnstrunk/jira-summarizer
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:a05c518d4912ae1c45351162c2916ddb691a79f103c86f5d13b3be3c492e5596
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
@@ -78,7 +78,7 @@ spec:
             ##################################################
             ## OCTO-3
             - name: rollup-3
-              image: ghcr.io/johnstrunk/jira-summarizer
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:a05c518d4912ae1c45351162c2916ddb691a79f103c86f5d13b3be3c492e5596
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
@@ -110,7 +110,7 @@ spec:
             ##################################################
             ## OCTO-4
             - name: rollup-4
-              image: ghcr.io/johnstrunk/jira-summarizer
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:a05c518d4912ae1c45351162c2916ddb691a79f103c86f5d13b3be3c492e5596
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
@@ -142,7 +142,7 @@ spec:
             ##################################################
             ## OCTO-6
             - name: rollup-6
-              image: ghcr.io/johnstrunk/jira-summarizer
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:a05c518d4912ae1c45351162c2916ddb691a79f103c86f5d13b3be3c492e5596
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
