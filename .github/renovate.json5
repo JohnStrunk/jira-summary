@@ -23,10 +23,7 @@
   },
   "kubernetes": {
     "fileMatch": [
-      "^jira-summarizer\\.yaml$",
-      "^jira-estimator\\.yaml$",
-      "^rollup\\.yaml$",
-      "^summarize-api\\.yaml$"
+      "^deploy/.*\\.yaml$"
     ]
   },
   "packageRules": [
