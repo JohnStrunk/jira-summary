@@ -14,9 +14,10 @@ from summarizer import get_or_update_summary, summarize_issue
 from summary_dbi import mariadb_db
 
 
-def main() -> None:  # pylint: disable=duplicate-code
+def main() -> None:
     """Main function"""
     parser = argparse.ArgumentParser(description="Summarize a JIRA issue")
+    # pylint: disable=duplicate-code
     parser.add_argument(
         "--log-level",
         default="WARNING",

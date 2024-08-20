@@ -12,11 +12,12 @@ from jiraissues import check_response, get_self, with_retry
 from summary_dbi import mariadb_db, mark_stale
 
 
-def main() -> None:  # pylint: disable=too-many-locals,duplicate-code
+def main() -> None:  # pylint: disable=too-many-locals
     """Main function"""
     parser = argparse.ArgumentParser(
         description="Watch the Jira API and invalidate summaries when issues are updated"
     )
+    # pylint: disable=duplicate-code
     parser.add_argument(
         "--log-level",
         default="WARNING",

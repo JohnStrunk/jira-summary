@@ -12,9 +12,10 @@ from summarizer import summarize_issue
 from summary_dbi import db_stats, get_stale_issues, mariadb_db, update_summary
 
 
-def main() -> None:  # pylint: disable=duplicate-code
+def main() -> None:
     """Main function"""
     parser = argparse.ArgumentParser(description="Refresh stale summaries")
+    # pylint: disable=duplicate-code
     parser.add_argument(
         "--log-level",
         default="WARNING",
