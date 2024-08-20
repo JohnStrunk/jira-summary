@@ -1,11 +1,13 @@
 #! /usr/bin/env python
 
-"""Summarize a JIRA issue"""
+"""
+Provide an API for summarizing Jira issues
 
-import datetime
+This module provides a REST API for summarizing Jira issues via a Flask app.
+"""
+
 import os
 import sys
-from datetime import UTC
 from sys import argv
 
 from atlassian import Jira  # type: ignore
@@ -17,32 +19,32 @@ from flask_jwt_extended import (
     get_jwt_identity,
     jwt_required,
 )
+from sqlalchemy import Engine
 
 import summarizer
 from jiraissues import Issue, issue_cache
 from simplestats import Timer
+from summary_dbi import db_stats, mariadb_db, mark_stale
 
-_DEFAULT_RECURSION_DEPTH = 0
 
-
-def issue_word_count(issue: Issue, max_depth: int = _DEFAULT_RECURSION_DEPTH) -> int:
+def _issue_word_count(issue: Issue, db: Engine) -> int:
     """
     Count the words in the text representation of a Jira issue
 
     Parameters:
         - issue: The Jira issue to count the words in
-        - max_depth: The maximum depth to recurse into the issue's related issues
+        - db: The database connection to use for caching summaries
     Returns:
         - The number of words in the issue's text representation
     """
-    full_prompt = summarizer.summarize_issue(issue, max_depth, return_prompt_only=True)
+    full_prompt = summarizer.summarize_issue(issue, db, return_prompt_only=True)
     # Get the text between the ``` delimiters, which is the actual Jira issue
     # text that we send to the model
     issue_text = full_prompt[full_prompt.find("```") + 3 : full_prompt.rfind("```")]
-    return word_count(issue_text)
+    return _word_count(issue_text)
 
 
-def word_count(text: str) -> int:
+def _word_count(text: str) -> int:
     """
     Count the words in a string
 
@@ -57,6 +59,10 @@ def word_count(text: str) -> int:
 def create_app():
     """Create the Flask app"""
     client = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
+    db = mariadb_db(
+        host=os.environ.get("MARIADB_HOST", "localhost"),
+        port=int(os.environ.get("MARIADB_PORT", 3306)),
+    )
 
     app = Flask(__name__)
     app.config["JWT_SECRET_KEY"] = os.environ["JWT_SECRET_KEY"]
@@ -66,6 +72,7 @@ def create_app():
 
     @app.route("/api/v1/health", methods=["GET"])
     def health():
+        # This should really verify that the Jira and MariaDB connections are working
         return {"status": "ok"}
 
     @app.route("/api/v1/summarize-issue", methods=["GET"])
@@ -77,13 +84,11 @@ def create_app():
         if key is None:
             return {"error": 'Missing required parameter "key"'}, 400
 
-        when = datetime.datetime.now(UTC) - datetime.timedelta(hours=1)
-        issue_cache.remove_older_than(when)
-        issue_cache.remove(key)
+        issue_cache.clear()
 
-        issue = issue_cache.get_issue(client, key)
-        issue_words = issue_word_count(issue)
-        summary = summarizer.summarize_issue(issue, max_depth=_DEFAULT_RECURSION_DEPTH)
+        issue = Issue(client, key)
+        issue_words = _issue_word_count(issue, db)
+        summary = summarizer.get_or_update_summary(issue, db)
         req.stop()
         getissue_stats = Timer.stats("IssueCache.get_issue")
         fetchrelated_stats = Timer.stats("Issue._fetch_related")
@@ -99,14 +104,38 @@ def create_app():
                 "llm_time": llm_stats.elapsed_ns / 1000000000,
                 "request_time": req.elapsed_ns / 1000000000,
                 "issue_words": issue_words,
-                "summary_words": word_count(summary),
+                "summary_words": _word_count(summary),
             },
+        }
+
+    @app.route("/api/v1/enqueue", methods=["GET"])
+    @jwt_required()
+    def enqueue():
+        key = request.args.get("key")
+        if key is None:
+            return {"error": 'Missing required parameter "key"'}, 400
+
+        mark_stale(db, key, add_ok=True)
+        return {
+            "key": key,
+            "user": get_jwt_identity(),
+        }
+
+    @app.route("/api/v1/dbstats", methods=["GET"])
+    @jwt_required()
+    def dbstats():
+        stats = db_stats(db)
+        return {
+            "user": get_jwt_identity(),
+            "total_records": stats["total"],
+            "stale_records": stats["stale"],
+            "fresh_records": stats["fresh"],
         }
 
     return app
 
 
-def create_token(identity: str) -> None:
+def _create_token(identity: str) -> None:
     """Create an access token for the given identity"""
     app = create_app()
     with app.app_context():
@@ -120,4 +149,4 @@ if __name__ == "__main__":
     if len(argv) != 2:
         print(f"Usage: {argv[0]} <userid>")
         sys.exit(1)
-    create_token(argv[1])
+    _create_token(argv[1])

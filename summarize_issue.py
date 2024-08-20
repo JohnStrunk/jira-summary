@@ -5,19 +5,16 @@
 import argparse
 import logging
 import os
-import textwrap
-from typing import Optional
 
-from atlassian import Jira
-from click import Option  # type: ignore
+from atlassian import Jira  # type: ignore
 
 from jiraissues import Issue
 from simplestats import Timer
-from summarizer import summarize_issue
-from summary_dbi import get_summary, mariadb_db, memory_db, update_summary
+from summarizer import get_or_update_summary, summarize_issue
+from summary_dbi import mariadb_db
 
 
-def main():
+def main() -> None:  # pylint: disable=duplicate-code
     """Main function"""
     parser = argparse.ArgumentParser(description="Summarize a JIRA issue")
     parser.add_argument(
@@ -46,24 +43,17 @@ def main():
 
     issue = Issue(jira, args.jira_issue_key)
     db = mariadb_db()
-    summary: Optional[str] = None
     if prompt_only:
-        summary = summarize_issue(
+        prompt_txt = summarize_issue(
             issue,
             db,
             return_prompt_only=prompt_only,
         )
-        print(summary)
+        print(prompt_txt)
     else:
-        summary = get_summary(db, issue.key)
-        if not summary:
-            summary = summarize_issue(
-                issue,
-                db,
-                return_prompt_only=prompt_only,
-            )
-            update_summary(db, issue.key, summary, issue.parent)
-        print(textwrap.fill(summary))
+        summary = get_or_update_summary(issue, db)
+        # print(textwrap.fill(summary))
+        print(summary)
 
 
 if __name__ == "__main__":

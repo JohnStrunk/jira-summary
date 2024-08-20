@@ -59,6 +59,16 @@ class TestDBI:
         assert len(stale_issues) == 1
         assert with_abc_123["key"] in stale_issues
 
+    def test_add_stale(self, db):
+        """Test adding a stale summary."""
+        key = "ZZZ-999"
+        # By default, marking a non-existent summary as stale does not add it to the db
+        mark_stale(db, key)
+        assert key not in get_stale_issues(db)
+        # But it can be added if requested
+        mark_stale(db, key, add_ok=True)
+        assert key in get_stale_issues(db)
+
     def test_updated_summaries_are_not_stale(self, db, with_abc_123):
         """Test that updating a summary makes it not stale."""
         mark_stale(db, with_abc_123["key"])

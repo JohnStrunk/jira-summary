@@ -5,7 +5,7 @@ import logging
 import os
 import textwrap
 from datetime import UTC, datetime, timedelta
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Union
 
 import genai.exceptions
 from atlassian import Jira  # type: ignore
@@ -25,7 +25,6 @@ from sqlalchemy import Engine
 import text_wrapper
 from jiraissues import (
     Issue,
-    RelatedIssue,
     User,
     check_response,
     descendants,
@@ -34,7 +33,7 @@ from jiraissues import (
     with_retry,
 )
 from simplestats import measure_function
-from summary_dbi import get_summary
+from summary_dbi import get_summary, mark_stale, update_summary
 
 _logger = logging.getLogger(__name__)
 
@@ -60,8 +59,34 @@ _WRAP_COLUMN = 78
 _wrapper = text_wrapper.TextWrapper(SUMMARY_START_MARKER, SUMMARY_END_MARKER)
 
 
+def get_or_update_summary(
+    issue: Issue, summary_db: Engine, stale_ok: bool = False
+) -> str:
+    """
+    Summarize a Jira issue and update the summary in the database.
+
+    This function will attempt to fetch the cached summary from the database. If
+    the summary is not found (or is stale), it will generate a new summary and
+    update the database.
+
+    Parameters:
+        - issue: The issue to summarize
+        - summary_db: The database to use for retrieving summaries of related
+          issues
+        - stale_ok: If True, allow a stale summary to be returned
+
+    Returns:
+        A string containing the summary
+    """
+    summary = get_summary(summary_db, issue.key, stale_ok)
+    if not summary:
+        summary = summarize_issue(issue, summary_db)
+        update_summary(summary_db, issue.key, summary, issue.parent)
+    return summary
+
+
 @measure_function
-def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too-many-locals
+def summarize_issue(
     issue: Issue,
     summary_db: Optional[Engine] = None,
     return_prompt_only: bool = False,
@@ -110,6 +135,10 @@ def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too
         summary = None
         if summary_db is not None:
             summary = get_summary(summary_db, related.key)
+            if not summary and related.is_child:
+                # If we don't have a summary for a child issue, queue it up to
+                # be summarized
+                mark_stale(summary_db, related.key, add_ok=True)
         # Fix up the "how" wording
         how = related.how
         if how == "Parent Link":
@@ -147,6 +176,8 @@ Status/Resolution: {issue.status}/{issue.resolution}
 ```
 {full_description}
 ```
+
+Please provide your summary below, in paragraph form, with no formatting:
 """
     if return_prompt_only:
         return llm_prompt

@@ -13,10 +13,17 @@ from atlassian import Jira  # type: ignore
 
 from jiraissues import issue_cache
 from simplestats import Timer
-from summarizer import get_issues_to_summarize, summarize_issue
+from summarizer import (
+    get_issues_to_summarize,
+    get_or_update_summary,
+    is_ok_to_post_summary,
+)
+from summary_dbi import mariadb_db
 
 
-def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
+def main() -> (
+    None
+):  # pylint: disable=too-many-locals,too-many-statements,duplicate-code
     """Main function for the bot."""
     # pylint: disable=duplicate-code
     parser = argparse.ArgumentParser(description="Summarizer bot")
@@ -60,16 +67,30 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         default=300,
         help="Seconds to wait between iterations",
     )
+    parser.add_argument(
+        "--db-host",
+        default="localhost",
+        type=str,
+        help="MariaDB host",
+    )
+    parser.add_argument(
+        "--db-port",
+        default=3306,
+        type=int,
+        help="MariaDB port",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level))
-    max_depth = args.max_depth
     send_updates = not args.no_update
     delay: int = args.seconds
     limit: int = args.limit
     since = datetime.fromisoformat(args.modified_since).astimezone(UTC)
+    db_host = str(args.db_host)
+    db_port = int(args.db_port)
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
+    db = mariadb_db(host=db_host, port=db_port)
 
     most_recent_modification = since
     while True:
@@ -89,9 +110,11 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         for issue_key in issue_keys:
             issue_start_time = datetime.now(UTC)
             issue = issue_cache.get_issue(jira, issue_key)
-            summary = summarize_issue(
-                issue, max_depth=max_depth, send_updates=send_updates
-            )
+            summary = get_or_update_summary(issue, db)
+            if is_ok_to_post_summary(issue) and send_updates:
+                # NEED TO POST THE SUMMARY TO THE JIRA ISSUE...
+                # CODE WAS REMOVED FROM summarize_issue DURING THE REFACTOR
+                pass
             elapsed = datetime.now(UTC) - issue_start_time
             print(f"Summarized {issue_key} ({elapsed}s):\n{summary}\n")
         since = most_recent_modification

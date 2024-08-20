@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from atlassian import Jira  # type: ignore
+from sqlalchemy import Engine
 
 from jiraissues import Issue, check_response, get_self, issue_cache, with_retry
 from summarizer import count_tokens, summarize_issue
+from summary_dbi import mariadb_db
 
 
 @dataclass
@@ -48,13 +50,11 @@ class IssueEstimate:
         )
 
 
-def estimate_issue(issue: Issue) -> IssueEstimate:
+def estimate_issue(issue: Issue, db: Engine) -> IssueEstimate:
     """Estimate the number of tokens needed to summarize the issue"""
     prompt = summarize_issue(
         issue,
-        max_depth=0,
-        send_updates=False,
-        regenerate=False,
+        db,
         return_prompt_only=True,
     )
     tokens = -1
@@ -129,14 +129,29 @@ def main() -> None:
         default=300,
         help="Window size in seconds to check for updated issues",
     )
+    parser.add_argument(
+        "--db-host",
+        default="localhost",
+        type=str,
+        help="MariaDB host",
+    )
+    parser.add_argument(
+        "--db-port",
+        default=3306,
+        type=int,
+        help="MariaDB port",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level))
     delay: int = args.seconds
     outfile = args.output
     window = timedelta(seconds=args.window)
+    db_host = str(args.db_host)
+    db_port = int(args.db_port)
 
     jira = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
+    db = mariadb_db(host=db_host, port=db_port)
 
     print(IssueEstimate.csv_header(), file=outfile)
     while True:
@@ -147,7 +162,7 @@ def main() -> None:
         issues = get_modified_issues(jira, since)
         print(f"Found {len(issues)} issues modified since {since}")
         for issue in issues:
-            print(estimate_issue(issue).as_csv(), file=outfile, flush=True)
+            print(estimate_issue(issue, db).as_csv(), file=outfile, flush=True)
             processed += 1
         print(issue_cache)
         print(f"Issues processed: {processed}")

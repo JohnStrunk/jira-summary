@@ -173,25 +173,38 @@ def update_summary(
         session.commit()
 
 
-def mark_stale(db: Engine, issue_key: str) -> None:
+def mark_stale(db: Engine, issue_key: str, add_ok: bool = False) -> bool:
     """
     Mark the AI summary for the given Jira issue key as stale.
+
+    When add_ok is True, the record will be added (as stale) to the database if
+    it doesn't exist. This is designed to interact with the a background refresh
+    process, essentially queuing up the issue for background summarization.
 
     Parameters:
         - db: Database engine
         - issue_key: Jira issue key
+        - add_ok: Whether to add the record if it doesn't exist
+
+    Returns:
+        - True if the record was marked as stale (or added), False if the record
+          does not exist and add_ok is False
     """
     with Session(db) as session:
         record = session.get(Summary, issue_key)
         if record is None:
-            # If the record doesn't exist, create a new one that will be marked
-            # as stale. This allows the refresh process to eventually generate a
-            # summary for it.
-            record = Summary(issue_key=issue_key)
-            session.add(record)
+            if add_ok:
+                # If the record doesn't exist, create a new one that will be marked
+                # as stale. This allows the refresh process to eventually generate a
+                # summary for it.
+                record = Summary(issue_key=issue_key)
+                session.add(record)
+            else:
+                return False
         if record.stale_ts is None:
             record.stale_ts = datetime.now(tz=UTC)
             session.commit()
+    return True
 
 
 def get_stale_issues(db: Engine, limit: int = 0) -> list[str]:
@@ -215,3 +228,23 @@ def get_stale_issues(db: Engine, limit: int = 0) -> list[str]:
         if limit > 0:
             query = query.limit(limit)
     return [record.issue_key for record in query.all()]
+
+
+def db_stats(db: Engine) -> dict[str, int]:
+    """
+    Get statistics about the AI summary database.
+
+    Parameters:
+        - db: Database engine
+
+    Returns:
+        - A dictionary with the following keys:
+            - total: Total number of records
+            - stale: Number of stale records
+            - fresh: Number of fresh records
+    """
+    with Session(db) as session:
+        total = session.query(Summary).count()
+        stale = session.query(Summary).filter(Summary.stale_ts.isnot(None)).count()
+        fresh = total - stale
+    return {"total": total, "stale": stale, "fresh": fresh}

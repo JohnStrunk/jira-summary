@@ -1,0 +1,103 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: summarizer-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: summarizer-db
+spec:
+  selector:
+    app: summmarizer-db
+  ports:
+    - protocol: TCP
+      name: db
+      port: 3306
+      targetPort: 3306
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: summarizer-db
+  labels:
+    app: summarizer-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: summarizer-db
+  strategy:
+    type: Recreate  # Delete existing before creating new
+  template:
+    metadata:
+      labels:
+        app: summarizer-db
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:lts-ubi
+          env:
+            - name: MARIADB_AUTO_UPGRADE
+              value: "1"
+          envFrom:
+            - secretRef:
+                name: jira-summarizer-secret
+                optional: false
+          livenessProbe:
+            exec:
+              command:
+                - healthcheck.sh
+                - "--connect"
+                - "--innodb_initialized"
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            tcpSocket:
+              port: db
+            failureThreshold: 60
+            periodSeconds: 5
+          ports:
+            - name: db
+              containerPort: 3306
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "2000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: db-data
+              mountPath: "/var/lib/mysql"
+            - name: run-mariadb
+              mountPath: /run/mariadb
+            - name: tmp
+              mountPath: /tmp
+      securityContext:
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: summarizer-db
+        - name: run-mariadb
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

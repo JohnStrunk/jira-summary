@@ -2,14 +2,14 @@
 kind: Route
 apiVersion: route.openshift.io/v1
 metadata:
-  name: summarize-api
+  name: summarizer-api
   labels:
-    app: summarize-api
+    app: summarizer-api
 spec:
   host: jira-summarizer.apps.platform-sts.pcbk.p1.openshiftapps.com
   to:
     kind: Service
-    name: summarize-api
+    name: summarizer-api
     weight: 100
   port:
     targetPort: 8000
@@ -22,10 +22,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: summarize-api
+  name: summarizer-api
 spec:
   selector:
-    app: summarize-api
+    app: summarizer-api
   ports:
     - protocol: TCP
       port: 8000
@@ -35,24 +35,24 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: summarize-api
+  name: summarizer-api
   labels:
-    app: summarize-api
+    app: summarizer-api
 spec:
   replicas: 10
   selector:
     matchLabels:
-      app: summarize-api
+      app: summarizer-api
   strategy:
     type: RollingUpdate
   template:
     metadata:
       labels:
-        app: summarize-api
+        app: summarizer-api
     spec:
       containers:
-        - name: summarize-api
-          image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
+        - name: summarizer-api
+          image: ghcr.io/johnstrunk/jira-summarizer
           command:
             - "/app/.venv/bin/gunicorn"
           args:
@@ -60,6 +60,9 @@ spec:
             - "--access-logfile=-"
             - "--timeout=60"
             - "summarize_api:create_app()"
+          env:
+            - name: MARIADB_HOST
+              value: summarizer-db
           envFrom:
             - secretRef:
                 name: jira-summarizer-secret
@@ -73,6 +76,13 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 60
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
