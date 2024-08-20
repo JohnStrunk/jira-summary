@@ -5,7 +5,7 @@ import logging
 import os
 import textwrap
 from datetime import UTC, datetime, timedelta
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Union
 
 import genai.exceptions
 from atlassian import Jira  # type: ignore
@@ -20,11 +20,11 @@ from genai.schema import (
 )
 from langchain_core.language_models import LLM, LanguageModelInput
 from langchain_core.runnables import RunnableConfig
+from sqlalchemy import Engine
 
 import text_wrapper
 from jiraissues import (
     Issue,
-    RelatedIssue,
     User,
     check_response,
     descendants,
@@ -33,6 +33,7 @@ from jiraissues import (
     with_retry,
 )
 from simplestats import measure_function
+from summary_dbi import get_summary, mark_stale, update_summary
 
 _logger = logging.getLogger(__name__)
 
@@ -58,67 +59,52 @@ _WRAP_COLUMN = 78
 _wrapper = text_wrapper.TextWrapper(SUMMARY_START_MARKER, SUMMARY_END_MARKER)
 
 
-@measure_function
-def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too-many-locals
-    issue: Issue,
-    max_depth: int = 0,
-    send_updates: bool = False,
-    regenerate: bool = False,
-    return_prompt_only: bool = False,
-    current_depth: int = 0,
+def get_or_update_summary(
+    issue: Issue, summary_db: Engine, stale_ok: bool = False
 ) -> str:
     """
-    Summarize a Jira issue.
+    Summarize a Jira issue and update the summary in the database.
 
-    Note: If send_updates is True, summaries may be updated for more than just
-    the requested Issue.
+    This function will attempt to fetch the cached summary from the database. If
+    the summary is not found (or is stale), it will generate a new summary and
+    update the database.
 
     Parameters:
         - issue: The issue to summarize
-        - max_depth: The maximum depth of child issues to examine while
-          generating the summary
-        - send_updates: If True, update the issue summaries on the server
-        - regenerate: If True, regenerate the summary even if it is already
-          up-to-date
-        - return_prompt_only: If True, return the prompt only and don't actually
-          summarize the issue
+        - summary_db: The database to use for retrieving summaries of related
+          issues
+        - stale_ok: If True, allow a stale summary to be returned
 
     Returns:
         A string containing the summary
     """
+    summary = get_summary(summary_db, issue.key, stale_ok)
+    if not summary:
+        summary = summarize_issue(issue, summary_db)
+        update_summary(summary_db, issue.key, summary, issue.parent)
+    return summary
 
-    # If the current summary is up-to-date and we're not asked to regenerate it,
-    # return what's there
-    if not regenerate and is_summary_current(issue) and not return_prompt_only:
-        _logger.info("Summarizing (using current): %s", issue)
-        return _wrapper.get(issue.status_summary) or ""
 
-    if return_prompt_only:
-        send_updates = False
+@measure_function
+def summarize_issue(
+    issue: Issue,
+    summary_db: Optional[Engine] = None,
+    return_prompt_only: bool = False,
+) -> str:
+    """
+    Summarize a Jira issue.
+
+    Parameters:
+        - issue: The issue to summarize
+        - summary_db: The database to use for retrieving summaries of related issues
+        - return_prompt_only: If True, return the prompt only and don't actually
+          summarize the issue
+
+    Returns:
+        A string containing the summary (or the prompt)
+    """
 
     _logger.info("Summarizing: %s", issue)
-    # if we have not reached max-depth, summarize the child issues for inclusion in this summary
-    child_summaries: List[Tuple[RelatedIssue, str]] = []
-    for child in issue.children:
-        if current_depth < max_depth:
-            child_issue = issue_cache.get_issue(issue.client, child.key)
-            # If the child issue is allowed to have a summary, we restart our
-            # recursion since it should get the full benefit of the recursion.
-            new_depth = 0 if is_ok_to_post_summary(child_issue) else current_depth + 1
-            child_summaries.append(
-                (
-                    child,
-                    summarize_issue(
-                        child_issue,
-                        max_depth=max_depth,
-                        send_updates=send_updates,
-                        regenerate=False,
-                        current_depth=new_depth,
-                    ),
-                )
-            )
-        else:
-            child_summaries.append((child, ""))
 
     # Handle the blockers
     blocker_block = io.StringIO()
@@ -145,34 +131,29 @@ def summarize_issue(  # pylint: disable=too-many-arguments,too-many-branches,too
         )
 
     related_block = io.StringIO()
-    # Only summarize the non-child related issues
-    non_children = [rel for rel in issue.related if not rel.is_child]
-    for related in non_children:
-        ri = issue_cache.get_issue(issue.client, related.key)
+    for related in issue.related:
+        summary = None
+        if summary_db is not None:
+            summary = get_summary(summary_db, related.key)
+            if not summary and related.is_child:
+                # If we don't have a summary for a child issue, queue it up to
+                # be summarized
+                mark_stale(summary_db, related.key, add_ok=True)
+        # Fix up the "how" wording
         how = related.how
         if how == "Parent Link":
-            how = "is a child of the parent issue"
+            how = "is a child of"
         if how == "Epic Link":
-            how = "is a child of the Epic issue"
-        related_block.write(f"* {issue.key} {how} {ri}\n")
-
-    for child, summary in child_summaries:
-        if not summary:
-            ri = issue_cache.get_issue(issue.client, child.key)
-            related_block.write(f"* {issue.key} {child.how} {ri}\n")
-        else:
+            how = "is a child of"
+        related_block.write(
+            f'* {issue.key}, {how} "{related.key}: {
+                related.summary} ({related.status}/{related.resolution})"\n'
+        )
+        if summary is not None:
             related_block.write(
-                f"* {issue.key} {child.how} {child.key}, and {child.key} can be summarized as:\n"
+                textwrap.fill(summary, initial_indent="  ", subsequent_indent="  ")
             )
-            related_block.write(
-                textwrap.fill(
-                    summary,
-                    width=_WRAP_COLUMN,
-                    initial_indent="  ",
-                    subsequent_indent="  ",
-                )
-                + "\n"
-            )
+            related_block.write("\n")
 
     full_description = f"""\
 Title: {issue.key} - {issue.summary}
@@ -190,16 +171,13 @@ Status/Resolution: {issue.status}/{issue.resolution}
 """
 
     llm_prompt = f"""\
-You are a helpful assistant who is an expert in software development.
 {_prompt_for_type(issue)}
-* Use only the information below to create your summary.
-* Include only the text of your summary in the response with no formatting.
-* Limit your summary to 100 words or less.
-* Today is {datetime.now().strftime("%A, %B %d, %Y")}.
 
 ```
 {full_description}
 ```
+
+Please provide your summary below, in paragraph form, with no formatting:
 """
     if return_prompt_only:
         return llm_prompt
@@ -209,9 +187,6 @@ You are a helpful assistant who is an expert in software development.
 
     chat = get_chat_model()
     summary = chat.invoke(llm_prompt, stop=["<|endoftext|>"]).strip()
-    if send_updates and is_ok_to_post_summary(issue):
-        # Replace any existing AI summary w/ the updated one
-        issue.update_status_summary(_wrapper.upsert(issue.status_summary, summary))
     return summary
 
 
@@ -238,8 +213,7 @@ def _prompt_for_type(issue: Issue) -> str:
         5. Relevant information from child issues
         6. Recent, impactful updates or changes
 
-        Use only the provided information. Limit your summary to 100 words or
-        fewer, with no additional formatting. Today's date is {datetime.now().strftime("%A, %B %d, %Y")}.
+        Use only the information below to create your summary.
         """
     ).strip()
     if issue.level == 3:  # Epic, Release Milestone
@@ -256,8 +230,7 @@ def _prompt_for_type(issue: Issue) -> str:
             6. Summarizing and tying together and relevant and new information that makes sense to include in the summary.
             Do not include a list of names or identifying numbers of child issues in the summmary
 
-            Use only the provided information. Limit your summary to 100 words or fewer,
-            with no additional formatting. Today's date is {datetime.now().strftime("%A, %B %d, %Y")}.
+            Use only the information below to create your summary.
             """
         ).strip()
     if issue.level >= 4:  # Feature, Initiative, Requirement
@@ -273,9 +246,7 @@ def _prompt_for_type(issue: Issue) -> str:
             5. Key information from child issues
             6. Recent, impactful updates affecting the outcome
 
-            Use only the provided information. Limit your summary to 100 words
-            or fewer, with no additional formatting. Today's date is
-            {datetime.now().strftime("%A, %B %d, %Y")}.
+            Use only the information below to create your summary.
             """
         ).strip()
     return default_prompt

@@ -13,7 +13,13 @@ from atlassian import Confluence, Jira  # type: ignore
 from cfhelper import CFElement, jiralink
 from jiraissues import Issue, User, descendants, issue_cache
 from simplestats import Timer
-from summarizer import get_chat_model, is_active, rollup_contributors, summarize_issue
+from summarizer import (
+    get_chat_model,
+    get_or_update_summary,
+    is_active,
+    rollup_contributors,
+)
+from summary_dbi import mariadb_db
 
 LINK_BASE = "https://issues.redhat.com/browse/"
 CONFLUENCE_SPACE = "OCTOET"
@@ -154,17 +160,32 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         required=True,
         help="Title or ID of the parent page",
     )
+    parser.add_argument(
+        "--db-host",
+        default="localhost",
+        type=str,
+        help="MariaDB host",
+    )
+    parser.add_argument(
+        "--db-port",
+        default=3306,
+        type=int,
+        help="MariaDB port",
+    )
     parser.add_argument("jira_issue_key", type=str, help="JIRA issue key")
 
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, str(args.log_level).upper()))
     issue_key: str = args.jira_issue_key
     inactive_days: int = args.inactive_days
+    db_host: str = str(args.db_host)
+    db_port: int = int(args.db_port)
 
     jclient = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
     cclient = Confluence(
         os.environ["CONFLUENCE_URL"], token=os.environ["CONFLUENCE_TOKEN"]
     )
+    db = mariadb_db(host=db_host, port=db_port)
 
     # Get the existing summaries from the Jira issues
     stime = Timer("Collect")
@@ -178,7 +199,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             logging.info("Skipping inactive issue %s", issue.key)
             continue
         text = f"{issue}\n"
-        text += summarize_issue(issue, max_depth=1)
+        text += get_or_update_summary(issue, db)
         child_inputs.append(
             IssueSummary(
                 issue=issue,

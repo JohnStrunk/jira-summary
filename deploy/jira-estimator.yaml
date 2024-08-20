@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
         - name: estimator
-          image: ghcr.io/johnstrunk/jira-summarizer:1.5.0@sha256:85ad7a19d32d23a32cf54d9f8c532a4596a85dff699d819f68f18adb289066e1
+          image: ghcr.io/johnstrunk/jira-summarizer
           command:
             - "/app/.venv/bin/python"
             - "estimator.py"
@@ -44,6 +44,8 @@ spec:
             - "300"
             - "--output"
             - "/data/estimates.csv"
+            - "--db-host"
+            - "summarizer-db"
           envFrom:
             - secretRef:
                 name: jira-summarizer-secret

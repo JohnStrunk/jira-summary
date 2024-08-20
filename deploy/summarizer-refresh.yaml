@@ -1,0 +1,79 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: summarizer-refresh
+  labels:
+    app: summarizer-refresh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: summarizer-refresh
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: summarizer-refresh
+    spec:
+      containers:
+        # Watch the Jira API and invalidate summaries when issues are updated
+        - name: invalidate
+          image: ghcr.io/johnstrunk/jira-summarizer
+          command:
+            - "/app/.venv/bin/python"
+            - "summarizer_invalidate.py"
+          args:
+            - "--log-level"
+            - "INFO"
+            - "--db-host"
+            - "summarizer-db"
+          envFrom:
+            - secretRef:
+                name: jira-summarizer-secret
+                optional: false
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "10m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+        # Watch the database and refresh summaries when they are invalidated
+        - name: refresh
+          image: ghcr.io/johnstrunk/jira-summarizer
+          command:
+            - "/app/.venv/bin/python"
+            - "summarizer_refresh.py"
+          args:
+            - "--log-level"
+            - "INFO"
+            - "--db-host"
+            - "summarizer-db"
+          envFrom:
+            - secretRef:
+                name: jira-summarizer-secret
+                optional: false
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "10m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      securityContext:
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 5
