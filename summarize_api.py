@@ -24,7 +24,7 @@ from sqlalchemy import Engine
 import summarizer
 from jiraissues import Issue, issue_cache
 from simplestats import Timer
-from summary_dbi import db_stats, mariadb_db, mark_stale
+from summary_dbi import db_stats, mariadb_db, mark_stale, memory_db
 
 
 def _issue_word_count(issue: Issue, db: Engine) -> int:
@@ -56,13 +56,16 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
-def create_app():
+def create_app(skip_db: bool = False) -> Flask:
     """Create the Flask app"""
     client = Jira(url=os.environ["JIRA_URL"], token=os.environ["JIRA_TOKEN"])
-    db = mariadb_db(
-        host=os.environ.get("MARIADB_HOST", "localhost"),
-        port=int(os.environ.get("MARIADB_PORT", 3306)),
-    )
+    if not skip_db:
+        db = mariadb_db(
+            host=os.environ.get("MARIADB_HOST", "localhost"),
+            port=int(os.environ.get("MARIADB_PORT", 3306)),
+        )
+    else:
+        db = memory_db()
 
     app = Flask(__name__)
     app.config["JWT_SECRET_KEY"] = os.environ["JWT_SECRET_KEY"]
@@ -137,7 +140,7 @@ def create_app():
 
 def _create_token(identity: str) -> None:
     """Create an access token for the given identity"""
-    app = create_app()
+    app = create_app(skip_db=True)
     with app.app_context():
         token = create_access_token(identity=identity)
         user = decode_token(token)

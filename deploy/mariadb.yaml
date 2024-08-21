@@ -17,7 +17,7 @@ metadata:
   name: summarizer-db
 spec:
   selector:
-    app: summmarizer-db
+    app: summarizer-db
   ports:
     - protocol: TCP
       name: db
