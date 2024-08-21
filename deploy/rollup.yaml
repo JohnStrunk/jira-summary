@@ -14,7 +14,7 @@ spec:
             ##################################################
             ## OCTO-1
             - name: rollup-1
-              image: ghcr.io/johnstrunk/jira-summarizer@sha256:8c48022192a4c82ef33812d60bef9884ebbef8403e1c14b6d4006f5995cf4a0a
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:f2383ac8fbcac5edf6256c10df1ce6cf4e50df91b675493f945b6cd8065f52d4
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
@@ -46,7 +46,7 @@ spec:
             ##################################################
             ## OCTO-2
             - name: rollup-2
-              image: ghcr.io/johnstrunk/jira-summarizer@sha256:8c48022192a4c82ef33812d60bef9884ebbef8403e1c14b6d4006f5995cf4a0a
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:f2383ac8fbcac5edf6256c10df1ce6cf4e50df91b675493f945b6cd8065f52d4
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
@@ -78,7 +78,7 @@ spec:
             ##################################################
             ## OCTO-3
             - name: rollup-3
-              image: ghcr.io/johnstrunk/jira-summarizer@sha256:8c48022192a4c82ef33812d60bef9884ebbef8403e1c14b6d4006f5995cf4a0a
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:f2383ac8fbcac5edf6256c10df1ce6cf4e50df91b675493f945b6cd8065f52d4
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
@@ -110,7 +110,7 @@ spec:
             ##################################################
             ## OCTO-4
             - name: rollup-4
-              image: ghcr.io/johnstrunk/jira-summarizer@sha256:8c48022192a4c82ef33812d60bef9884ebbef8403e1c14b6d4006f5995cf4a0a
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:f2383ac8fbcac5edf6256c10df1ce6cf4e50df91b675493f945b6cd8065f52d4
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
@@ -142,7 +142,7 @@ spec:
             ##################################################
             ## OCTO-6
             - name: rollup-6
-              image: ghcr.io/johnstrunk/jira-summarizer@sha256:8c48022192a4c82ef33812d60bef9884ebbef8403e1c14b6d4006f5995cf4a0a
+              image: ghcr.io/johnstrunk/jira-summarizer@sha256:f2383ac8fbcac5edf6256c10df1ce6cf4e50df91b675493f945b6cd8065f52d4
               command:
                 - "/app/.venv/bin/python"
                 - "rollup_status.py"
