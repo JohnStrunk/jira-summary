@@ -256,7 +256,7 @@ class Issue:  # pylint: disable=too-many-instance-attributes
         )
         self._related: Optional[List[RelatedIssue]] = None
         # Some instances have None for the blocked flag instead of a value
-        blocked_dict = rget(data, "fields", CF_BLOCKED, default={})
+        blocked_dict = rget(data, "fields", CF_BLOCKED, default={}) or {}
         self.blocked = str(blocked_dict.get("value", "False")).lower() in ["true"]
         self.blocked_reason: str = rget(data, "fields", CF_BLOCKED_REASON, default="")
         self.contributors = {
