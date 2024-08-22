@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: summarizer
-          image: ghcr.io/johnstrunk/jira-summarizer@sha256:ee82393f411561358e6afc7c1509feb173fa0f6ca0ed6cfa15b3f4ceeab81330
+          image: ghcr.io/johnstrunk/jira-summarizer@sha256:b693094a2acc3e56066354f1b3f685a107b8ad45824066d97bda50ef0793061a
           args:
             - "--log-level"
             - "INFO"
