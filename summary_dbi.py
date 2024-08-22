@@ -83,7 +83,11 @@ class Summary(_Base):  # pylint: disable=too-few-public-methods
 
 def memory_db() -> Engine:
     """Create an in-memory AI summary database."""
-    engine = create_engine("sqlite+pysqlite:///:memory:", echo=True)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        echo=True,
+        pool_pre_ping=True,
+    )
 
     # Create the DB table(s) if they don't exist
     _Base.metadata.create_all(engine)
@@ -114,7 +118,8 @@ def mariadb_db(
     password = password or os.getenv("MARIADB_ROOT_PASSWORD")
     database = db_name or os.getenv("MARIADB_DATABASE")
     engine = create_engine(
-        f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
+        f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4",
+        pool_pre_ping=True,
     )
 
     # Create the DB table(s) if they don't exist
