@@ -20,7 +20,7 @@ spec:
       containers:
         # Watch the Jira API and invalidate summaries when issues are updated
         - name: invalidate
-          image: ghcr.io/johnstrunk/jira-summarizer@sha256:dac37fbc39f97e605688d51c34f59d798b9ac2306ac2f5f2ba42564eddb07b9e
+          image: ghcr.io/johnstrunk/jira-summarizer@sha256:2232f18207ef06f918eb708ef82165e4d6bf08642d42ce3a9092c6ad4a161e39
           command:
             - "/app/.venv/bin/python"
             - "summarizer_invalidate.py"
@@ -48,7 +48,7 @@ spec:
             readOnlyRootFilesystem: true
         # Watch the database and refresh summaries when they are invalidated
         - name: refresh
-          image: ghcr.io/johnstrunk/jira-summarizer@sha256:dac37fbc39f97e605688d51c34f59d798b9ac2306ac2f5f2ba42564eddb07b9e
+          image: ghcr.io/johnstrunk/jira-summarizer@sha256:2232f18207ef06f918eb708ef82165e4d6bf08642d42ce3a9092c6ad4a161e39
           command:
             - "/app/.venv/bin/python"
             - "summarizer_refresh.py"
