@@ -8,6 +8,7 @@ This module provides a REST API for summarizing Jira issues via a Flask app.
 
 import os
 import sys
+from logging.config import dictConfig
 from sys import argv
 
 from atlassian import Jira  # type: ignore
@@ -67,6 +68,25 @@ def create_app(skip_db: bool = False) -> Flask:
     else:
         db = memory_db()
 
+    dictConfig(
+        {
+            "version": 1,
+            "formatters": {
+                "default": {
+                    "format": "[%(asctime)s] [%(levelname)s] in %(module)s: %(message)s",
+                }
+            },
+            "handlers": {
+                "wsgi": {
+                    "class": "logging.StreamHandler",
+                    "stream": "ext://flask.logging.wsgi_errors_stream",
+                    "formatter": "default",
+                }
+            },
+            "root": {"level": "INFO", "handlers": ["wsgi"]},
+        }
+    )
+
     app = Flask(__name__)
     app.config["JWT_SECRET_KEY"] = os.environ["JWT_SECRET_KEY"]
     assert app.config["JWT_SECRET_KEY"] is not None
@@ -86,6 +106,8 @@ def create_app(skip_db: bool = False) -> Flask:
         key = request.args.get("key")
         if key is None:
             return {"error": 'Missing required parameter "key"'}, 400
+
+        app.logger.info("/api/v1/summarize-issue: %s", key)
 
         issue_cache.clear()
 
@@ -118,6 +140,8 @@ def create_app(skip_db: bool = False) -> Flask:
         if key is None:
             return {"error": 'Missing required parameter "key"'}, 400
 
+        app.logger.info("/api/v1/enqueue: %s", key)
+
         mark_stale(db, key, add_ok=True)
         return {
             "key": key,
@@ -127,6 +151,7 @@ def create_app(skip_db: bool = False) -> Flask:
     @app.route("/api/v1/dbstats", methods=["GET"])
     @jwt_required()
     def dbstats():
+        app.logger.info("/api/v1/dbstats")
         stats = db_stats(db)
         return {
             "user": get_jwt_identity(),
