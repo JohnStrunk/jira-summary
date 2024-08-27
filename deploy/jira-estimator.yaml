@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
         - name: estimator
-          image: ghcr.io/johnstrunk/jira-summarizer@sha256:15164e4fa34fdb0484efad7b9b8f126025fe49c55a781cd2a70342211b177b4a
+          image: ghcr.io/johnstrunk/jira-summarizer@sha256:8f7c2b6d17e1fa9bb6fe2e1edbb6d571d87fbd10433b2c33556b52e2686fb442
           command:
             - "/app/.venv/bin/python"
             - "estimator.py"
