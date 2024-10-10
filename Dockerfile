@@ -1,6 +1,6 @@
 # This Dockerfile is based on the pattern recommended by the pipenv docs:
 # https://pipenv.pypa.io/en/latest/docker.html
-FROM python:3.12@sha256:05855f5bf06f5a004b0c1a8aaac73a9d9ea54390fc289d3e80ef52c4f90d5585 as builder
+FROM python:3.13@sha256:45803c375b95ea33f482e53a461eca8f247617667d703660a06ccf5eb3d05326 as builder
 
 RUN pip install --no-cache-dir pipenv==2023.12.1
 ENV PIPENV_VENV_IN_PROJECT=1
@@ -11,7 +11,7 @@ RUN pipenv --no-site-packages install -v --deploy
 
 
 ############################################################
-FROM python:3.12-slim@sha256:af4e85f1cac90dd3771e47292ea7c8a9830abfabbe4faa5c53f158854c2e819d as final
+FROM python:3.13-slim@sha256:2ec5a4a5c3e919570f57675471f081d6299668d909feabd8d4803c6c61af666c as final
 
 RUN adduser --uid 19876 summarizer-bot && \
     mkdir /app && \
