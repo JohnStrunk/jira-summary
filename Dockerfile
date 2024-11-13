@@ -11,7 +11,7 @@ RUN pipenv --no-site-packages install -v --deploy
 
 
 ############################################################
-FROM python:3.12-slim@sha256:bf56479ea0f2360e067fcf491dc1531a1a4003e40aec33d2ff114aed302aab11 as final
+FROM python:3.12-slim@sha256:d789b458e70bda0a34f31b1535283086662ac6042efb0178df7e868cd10b4a6b as final
 
 RUN adduser --uid 19876 summarizer-bot && \
     mkdir /app && \
