@@ -1,6 +1,6 @@
 # This Dockerfile is based on the pattern recommended by the pipenv docs:
 # https://pipenv.pypa.io/en/latest/docker.html
-FROM python:3.12@sha256:62babc88fa99827b7004d13062ed49c55beaeb7a45ab10a6949694ff3f8a5354 as builder
+FROM python:3.12@sha256:437bfc073961c60072e82e6ed581864f26379ac1cd391109df7ac46730a9f18b as builder
 
 RUN pip install --no-cache-dir pipenv==2023.12.1
 ENV PIPENV_VENV_IN_PROJECT=1
