@@ -2,7 +2,7 @@
 	// For format details, see https://aka.ms/devcontainer.json. For config options, see the
 	// README at: https://github.com/devcontainers/templates/tree/main/src/debian
 	"name": "Python",
-	"image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm@sha256:97d318d30aa5471aac86ea29f505d4ee257da29296984752b353de571d43b5c4",
+	"image": "mcr.microsoft.com/devcontainers/python:3.13-bookworm@sha256:f84dde6b1993dca054dbeab997220a1e346ac1c6bf08af1f69412e47ac1d2200",
 
 	// Features to add to the dev container. See: https://containers.dev/features
 	"features": {
