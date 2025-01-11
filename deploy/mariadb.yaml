@@ -45,7 +45,7 @@ spec:
     spec:
       containers:
         - name: mariadb
-          image: mariadb:lts-ubi@sha256:0ef1b21e4731c4b67d2e4ada15555ca52313cca724c37a1097cd59a66fd8d5a6
+          image: mariadb:lts-ubi@sha256:715a7ae083b89028a59164d2a17e63d49698de8d4a47341367b7b2ebe347b571
           env:
             - name: MARIADB_AUTO_UPGRADE
               value: "1"
