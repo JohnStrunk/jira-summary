@@ -1,27 +1,30 @@
----
 # https://docs.mergify.com/
 
+
 pull_request_rules:
-  - name: Automatic merge on approval
-    conditions:
-      - "#approved-reviews-by>=1"
+  - name: Automatic merge PRs from trusted contributors + Automatic merge on approval
+    conditions: []
     actions:
       queue:
-        merge_method: merge
-
-  - name: Automatic merge PRs from trusted contributors
-    conditions:
+queue_rules:
+  - name: duplicated default from Automatic merge PRs from trusted contributors
+    queue_conditions:
+      - base=main
+      - "#changes-requested-reviews-by=0"
+      - label!=do-not-merge
+      - check-success=CI Workflow - Success
+      - "#approved-reviews-by>=1"
       - or:
           - author=JohnStrunk
           - author=renovate-bot  # Renovate bot - dependency updates
-    actions:
-      queue:
-        merge_method: merge
-
-queue_rules:
+    merge_conditions: []
+    merge_method: merge
   - name: default
     queue_conditions:
       - base=main
       - "#changes-requested-reviews-by=0"
       - label!=do-not-merge
       - check-success=CI Workflow - Success
+      - "#approved-reviews-by>=1"
+    merge_conditions: []
+    merge_method: merge
